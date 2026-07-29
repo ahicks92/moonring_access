@@ -29,6 +29,48 @@ name = "ma_dev_server"
 
 [[patches]]
 [patches.module]
+source = "ma_id.lua"
+before = "main.lua"
+name = "ma_id"
+
+[[patches]]
+[patches.module]
+source = "ma_mb.lua"
+before = "main.lua"
+name = "ma_mb"
+
+[[patches]]
+[patches.module]
+source = "ma_graph.lua"
+before = "main.lua"
+name = "ma_graph"
+
+[[patches]]
+[patches.module]
+source = "ma_keygraph.lua"
+before = "main.lua"
+name = "ma_keygraph"
+
+[[patches]]
+[patches.module]
+source = "ma_dispatcher.lua"
+before = "main.lua"
+name = "ma_dispatcher"
+
+[[patches]]
+[patches.module]
+source = "ma_input.lua"
+before = "main.lua"
+name = "ma_input"
+
+[[patches]]
+[patches.module]
+source = "ma_overlays.lua"
+before = "main.lua"
+name = "ma_overlays"
+
+[[patches]]
+[patches.module]
 source = "moonring_access.lua"
 before = "main.lua"
 name = "moonring_access"

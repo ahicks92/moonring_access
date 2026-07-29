@@ -16,6 +16,13 @@ local MODULES = {
     { name = "ma_hooks",       file = "Mods/MoonringAccess/ma_hooks.lua" },
     { name = "ma_speech",      file = "Mods/MoonringAccess/ma_speech.lua" },
     { name = "ma_dev_server",  file = "Mods/MoonringAccess/ma_dev_server.lua" },
+    { name = "ma_id",          file = "Mods/MoonringAccess/ma_id.lua" },
+    { name = "ma_mb",          file = "Mods/MoonringAccess/ma_mb.lua" },
+    { name = "ma_graph",       file = "Mods/MoonringAccess/ma_graph.lua" },
+    { name = "ma_keygraph",    file = "Mods/MoonringAccess/ma_keygraph.lua" },
+    { name = "ma_dispatcher",  file = "Mods/MoonringAccess/ma_dispatcher.lua" },
+    { name = "ma_input",       file = "Mods/MoonringAccess/ma_input.lua" },
+    { name = "ma_overlays",    file = "Mods/MoonringAccess/ma_overlays.lua" },
     { name = "moonring_access", file = "Mods/MoonringAccess/moonring_access.lua" },
 }
 
@@ -63,6 +70,22 @@ function M.pump(dt)
     local dev = require("ma_dev_server")
     dev.poll()
 
+    -- Realize claimed input: feed each command to the overlay dispatcher and
+    -- speak the result. Overlay speech interrupts (it is direct feedback to a
+    -- deliberate press).
+    local input = require("ma_input")
+    local dispatcher = require("ma_dispatcher")
+    local speech = require("ma_speech")
+    for _, cmd in ipairs(input.drain()) do
+        local r = dispatcher.tick(cmd)
+        if r and r.message then speech.say(r.message, true) end
+    end
+
+    -- Idle tick: announces fresh opens, sub-identity swaps, and focus
+    -- reconciliation jumps even when no key was pressed.
+    local r = dispatcher.tick(nil)
+    if r and r.message then speech.say(r.message, true) end
+
     if st.pending_reload then
         st.pending_reload = false
         stage("reload", do_reload)
@@ -97,12 +120,20 @@ function M.boot()
         end)
     end)
 
+    stage("overlays", function()
+        require("ma_overlays").register_all()
+    end)
+
     stage("keyboard hook", function()
         -- After the game rebuilds its key dicts each 40Hz tick: inject dev
-        -- keys (and later, claim the mod's own vocabulary).
+        -- keys first (so synthesized test keys travel the claim path exactly
+        -- like real ones), then claim the mod's vocabulary.
+        local input = require("ma_input")
         hooks.wrap(G_Keyboard, "fixedUpdate", function(orig)
             orig()
             pcall(dev.inject_pending_keys, G_Keyboard)
+            local ok, err = pcall(input.claim, G_Keyboard)
+            if not ok then print("[MoonringAccess] claim error: " .. tostring(err)) end
         end)
     end)
 
@@ -122,6 +153,13 @@ function M.boot()
                 return orig(self, total_text, no_spam)
             end)
         end
+    end)
+
+    stage("mute", function()
+        -- MOONRING_ACCESS_MUTE mutes the GAME too, not just mod speech: test
+        -- runs must not play music/sfx over the developer's screen reader.
+        -- Master OpenAL volume covers music, sfx, and future mod cues alike.
+        if speech.muted() then love.audio.setVolume(0) end
     end)
 
     stage("announce", function()

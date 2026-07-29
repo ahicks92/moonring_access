@@ -113,9 +113,15 @@ function M.inject_pending_keys(kb)
     end
     local entry = table.remove(D.key_queue, 1)
     if not entry then return end
+    st.input = st.input or {}
+    st.input.injected = st.input.injected or {}
     for _, key in ipairs(entry.keys) do
         kb.currentKeyPressDictionary[key] = true
         kb.justPressedDictionary[key] = true
+        -- Keys outside the game's allKeys scan (home/end/numpad) are edge-
+        -- detected by ma_input via love.keyboard.isDown, which synthesized
+        -- keys never touch — mirror them into an injected set it also reads.
+        st.input.injected[key] = true
     end
     D.key_gap = KEY_GAP_TICKS
 end
@@ -173,6 +179,8 @@ local function handle(client)
             love.filesystem.remove("ma_shot.png")
             love.graphics.captureScreenshot("ma_shot.png")
             respond(client, "200 OK", love.filesystem.getSaveDirectory() .. "/ma_shot.png")
+        elseif path == "/gui" then
+            respond(client, "200 OK", require("ma_dispatcher").describe())
         elseif path == "/reload" and method == "POST" then
             st.pending_reload = true
             respond(client, "200 OK", "reload scheduled")
