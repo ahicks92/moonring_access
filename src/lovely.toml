@@ -11,6 +11,24 @@ priority = 0
 #     patch with an explicit name.
 [[patches]]
 [patches.module]
+source = "ma_hooks.lua"
+before = "main.lua"
+name = "ma_hooks"
+
+[[patches]]
+[patches.module]
+source = "ma_speech.lua"
+before = "main.lua"
+name = "ma_speech"
+
+[[patches]]
+[patches.module]
+source = "ma_dev_server.lua"
+before = "main.lua"
+name = "ma_dev_server"
+
+[[patches]]
+[patches.module]
 source = "moonring_access.lua"
 before = "main.lua"
 name = "moonring_access"
