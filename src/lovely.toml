@@ -1,0 +1,28 @@
+# MoonringAccess — Lovely patch manifest.
+# Registers the mod's Lua as requireable modules, then boots once at the end of
+# love.load, when every game global/class exists. Lovely only — no other loader.
+
+[manifest]
+version = "0.1.0"
+priority = 0
+
+# --- Register mod Lua as requireable modules. Lovely does NOT add the mod
+#     folder to the require path, so every file we `require` needs a module
+#     patch with an explicit name.
+[[patches]]
+[patches.module]
+source = "moonring_access.lua"
+before = "main.lua"
+name = "moonring_access"
+
+# --- Boot at the end of love.load (after the mouse handler init, the last
+#     substantive statement). GameState has already switched to the title
+#     screen; all widget classes and globals exist.
+[[patches]]
+[patches.pattern]
+target = "main.lua"
+pattern = "G_MouseHandler.initialise(G_DrawOffsetHorizontal + G_Globals.screenShakeX, G_DrawOffsetVertical + G_Globals.screenShakeY, gDrawScale)"
+position = "after"
+payload = "require('moonring_access').boot()"
+match_indent = true
+times = 1

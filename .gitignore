@@ -1,0 +1,18 @@
+# Extracted Moonring game source — copyrighted by Fluttermind, kept as a LOCAL
+# reference only at ../moonring-decomp. Never commit game code. (Guard in case
+# a copy ever lands back inside the repo.)
+game/
+*-decomp/
+
+# Runtime logs
+*.log
+
+# Local save backups (real player data, never committed)
+save-backups/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vs/
+.idea/
+.vscode/
