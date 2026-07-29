@@ -16,6 +16,8 @@ local MODULES = {
     { name = "ma_hooks",       file = "Mods/MoonringAccess/ma_hooks.lua" },
     { name = "ma_speech",      file = "Mods/MoonringAccess/ma_speech.lua" },
     { name = "ma_dev_server",  file = "Mods/MoonringAccess/ma_dev_server.lua" },
+    { name = "ma_text",        file = "Mods/MoonringAccess/ma_text.lua" },
+    { name = "ma_buffers",     file = "Mods/MoonringAccess/ma_buffers.lua" },
     { name = "ma_id",          file = "Mods/MoonringAccess/ma_id.lua" },
     { name = "ma_mb",          file = "Mods/MoonringAccess/ma_mb.lua" },
     { name = "ma_graph",       file = "Mods/MoonringAccess/ma_graph.lua" },
@@ -23,6 +25,7 @@ local MODULES = {
     { name = "ma_dispatcher",  file = "Mods/MoonringAccess/ma_dispatcher.lua" },
     { name = "ma_input",       file = "Mods/MoonringAccess/ma_input.lua" },
     { name = "ma_overlays",    file = "Mods/MoonringAccess/ma_overlays.lua" },
+    { name = "ma_app",         file = "Mods/MoonringAccess/ma_app.lua" },
     { name = "moonring_access", file = "Mods/MoonringAccess/moonring_access.lua" },
 }
 
@@ -76,15 +79,28 @@ function M.pump(dt)
     local input = require("ma_input")
     local dispatcher = require("ma_dispatcher")
     local speech = require("ma_speech")
+    local app = require("ma_app")
     for _, cmd in ipairs(input.drain()) do
-        local r = dispatcher.tick(cmd)
-        if r and r.message then speech.say(r.message, true) end
+        if cmd.kind == "app" then
+            app.dispatch(cmd)
+        else
+            local r = dispatcher.tick(cmd)
+            if r and r.message then speech.say(r.message, true) end
+        end
     end
 
     -- Idle tick: announces fresh opens, sub-identity swaps, and focus
     -- reconciliation jumps even when no key was pressed.
     local r = dispatcher.tick(nil)
     if r and r.message then speech.say(r.message, true) end
+
+    -- Game-log lines captured this frame, coalesced into one non-interrupting
+    -- utterance, then the tile watcher (which follows the same turn's prose).
+    if st.pending_say and #st.pending_say > 0 then
+        speech.say(table.concat(st.pending_say, " "), false)
+        st.pending_say = {}
+    end
+    pcall(app.watch_tick)
 
     if st.pending_reload then
         st.pending_reload = false
@@ -138,15 +154,23 @@ function M.boot()
     end)
 
     stage("game text feed", function()
-        -- Feed every game-log line to /log. (Speaking these comes in Phase 3;
-        -- the dev feed exists from day one so tests can assert on game text.)
+        -- Every game-log line: dev ring (/log), the review buffer, and the
+        -- pending-speech list flushed once per frame by the pump.
+        local text = require("ma_text")
+        local buffers = require("ma_buffers")
+        local st = hooks.state
         if G_stateGame then
             hooks.wrap(G_stateGame, "addText", function(orig, self, total_text, no_spam)
                 pcall(function()
                     if type(total_text) == "string" then
-                        local clean = total_text:gsub("%b{}", "")
-                        for line in clean:gmatch("[^\n]+") do
-                            dev.on_game_text(line)
+                        for line in tostring(total_text):gmatch("[^\n]+") do
+                            local clean = text.clean(line)
+                            if clean ~= "" then
+                                dev.on_game_text(clean)
+                                buffers.add("log", clean)
+                                st.pending_say = st.pending_say or {}
+                                st.pending_say[#st.pending_say + 1] = clean
+                            end
                         end
                     end
                 end)

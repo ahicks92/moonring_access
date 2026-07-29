@@ -27,9 +27,10 @@ local function widget(name)
     return nil
 end
 
--- Strip the game's {col1}/{white} colour markup for speech.
+-- Full speech cleanup: colour markup stripped, font glyph chars named.
+local ma_text = require("ma_text")
 local function clean(text)
-    return (tostring(text or ""):gsub("%b{}", ""))
+    return ma_text.clean(text)
 end
 
 -- ------------------------------------------------------------ multi-choice --

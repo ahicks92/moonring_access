@@ -106,8 +106,55 @@ function M.claim(kb)
         for _, k in ipairs(CONFIRM_KEYS) do eat(kb, k) end
     end
 
-    -- Gameplay-context keys (exploration cursor, announcers) arrive in later
-    -- phases; they will consume `extra` and mod chords here.
+    -- Review buffers, any context: Ctrl+arrows (arrows only — Ctrl+WASD left
+    -- alone). Up/down step lines, left/right switch buffers.
+    if mods.ctrl then
+        for _, arrow in ipairs({ "up", "down", "left", "right" }) do
+            if kb.justPressedDictionary[arrow] then
+                if arrow == "up" or arrow == "down" then
+                    push({ kind = "app", action = "buffer_step", dir = arrow, mods = mods })
+                else
+                    push({ kind = "app", action = "buffer_switch", dir = arrow, mods = mods })
+                end
+                eat(kb, arrow)
+            end
+        end
+    end
+
+    -- Gameplay announcer/status chords. Modifier chords are claimed whenever
+    -- the game state is active (a held modifier never types); the bare H key
+    -- only when nothing UI-ish would want the keypress.
+    local gamestate_ok, gamestate = pcall(require, "library.gamestate")
+    local in_game = gamestate_ok and G_stateGame ~= nil and gamestate.current() == G_stateGame
+
+    if in_game then
+        local CHORDS = {   -- ctrl+letter -> action
+            h = "pois", x = "vitals", m = "money", p = "position",
+            t = "turns", q = "modes",
+        }
+        if mods.ctrl then
+            for letter, action in pairs(CHORDS) do
+                if kb.justPressedDictionary[letter] then
+                    push({ kind = "app", action = action, mods = mods })
+                    eat(kb, letter)
+                end
+            end
+        elseif mods.alt then
+            if kb.justPressedDictionary["h"] then
+                push({ kind = "app", action = "terrain", mods = mods })
+                eat(kb, "h")
+            end
+        elseif kb.justPressedDictionary["h"] and not dispatcher.engaged() then
+            local blocked = false
+            local ok, b = pcall(G_stateGame.isUIBlockingPlayerMovement, G_stateGame)
+            if ok then blocked = b and true or false end
+            if not blocked then
+                push({ kind = "app", action = "hostiles", mods = mods })
+                eat(kb, "h")
+            end
+        end
+    end
+
     I.last_extra = extra
     I.last_mods = mods
 end

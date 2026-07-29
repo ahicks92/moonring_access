@@ -29,6 +29,24 @@ name = "ma_dev_server"
 
 [[patches]]
 [patches.module]
+source = "ma_text.lua"
+before = "main.lua"
+name = "ma_text"
+
+[[patches]]
+[patches.module]
+source = "ma_buffers.lua"
+before = "main.lua"
+name = "ma_buffers"
+
+[[patches]]
+[patches.module]
+source = "ma_app.lua"
+before = "main.lua"
+name = "ma_app"
+
+[[patches]]
+[patches.module]
 source = "ma_id.lua"
 before = "main.lua"
 name = "ma_id"

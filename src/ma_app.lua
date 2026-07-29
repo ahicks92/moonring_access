@@ -1,0 +1,274 @@
+-- ma_app.lua — gameplay one-shot actions: the H-family announcers, status
+-- chords, review-buffer navigation, and the per-turn tile watcher.
+--
+-- Everything reads live game state at speak time (never cached), through
+-- pcall guards: a read that breaks on some game state must degrade to
+-- silence-with-log, not a crash.
+
+local text = require("ma_text")
+local speech = require("ma_speech")
+local buffers = require("ma_buffers")
+local hooks = require("ma_hooks")
+
+local st = hooks.state
+st.watch = st.watch or {}
+local W = st.watch
+
+local M = {}
+
+local function player()
+    return G_stateGame and G_stateGame.actorManager and G_stateGame.actorManager.player
+end
+
+local function root_name(root)
+    if not root then return nil end
+    local named = CCellData and CCellData.rootToText and CCellData.rootToText[root]
+    return named or root
+end
+
+-- ------------------------------------------------------------- announcers --
+
+-- H: hostiles the player can currently see, nearest first.
+local function announce_hostiles()
+    local p = player()
+    if not p then return end
+    local found = {}
+    for _, a in ipairs(G_stateGame.actorManager.actorArray) do
+        if a ~= p and not a.isDead and not a.isCorpse and a.faction == "enemy" then
+            local ok, vis = pcall(a.getIsVisibleToPlayer, a)
+            if ok and vis then
+                local dx = a.position.x - p.position.x
+                local dy = a.position.y - p.position.y
+                local okn, name = pcall(a.getDisplayName, a)
+                found[#found + 1] = {
+                    d = text.dist(dx, dy),
+                    s = (okn and name or a.actorType or "creature") .. ", " .. text.offset(dx, dy),
+                }
+            end
+        end
+    end
+    if #found == 0 then
+        speech.say("No hostiles in sight.", true)
+        return
+    end
+    table.sort(found, function(a, b) return a.d < b.d end)
+    local parts = {}
+    for i = 1, math.min(#found, 10) do parts[#parts + 1] = found[i].s end
+    speech.say(#found .. (#found == 1 and " hostile: " or " hostiles: ") .. table.concat(parts, "; "), true)
+end
+
+-- Map roots worth reporting as points of interest.
+local POI_ROOTS = {
+    doorClosed = true, doorOpen = true, doorLocked = true, doorMetal = true,
+    doorBroken = true, gateClosed = true, gateOpen = true, gateLocked = true,
+    stairsUp = true, stairsDown = true,
+    chestClosed = true, crateClosed = true, barrelClosed = true, bookshelf = true,
+    campfire = true, bed = true, throne = true, well = true,
+}
+
+local POI_RADIUS = 12
+
+-- Iterate remembered tiles in a box around the player; cb(x, y, dx, dy, root).
+local function each_remembered_tile(cb)
+    local p = player()
+    if not p then return end
+    local map = G_stateGame.map
+    local px, py = p.position.x, p.position.y
+    for dy = -POI_RADIUS, POI_RADIUS do
+        for dx = -POI_RADIUS, POI_RADIUS do
+            local x, y = px + dx, py + dy
+            local ok, mx, my = pcall(map.convertWorldXYToMapXYZeroIndexed, map, x, y)
+            if ok and mx then
+                local okr, rem = pcall(map.getIsRemembered, map, mx, my)
+                if okr and rem then
+                    local okroot, root = pcall(map.getRootAtMapXYZeroIndexed, map, mx, my)
+                    cb(x, y, dx, dy, okroot and root or nil)
+                end
+            end
+        end
+    end
+end
+
+-- Triggers (signs, searchables, entrances) at a tile, as a spoken name.
+local function trigger_names_at(x, y)
+    local names = {}
+    if not (G_stateGame.triggerData and G_stateGame.currentWorldName) then return names end
+    local ok, list = pcall(G_stateGame.triggerData.getAllTriggersOnLevelAtXYZeroIndexed,
+        G_stateGame.triggerData, G_stateGame.currentWorldName, x, y)
+    if not ok or type(list) ~= "table" then return names end
+    -- Non-informative internal trigger actions a player never interacts with.
+    local SKIP = { playerStart = true, firewall = true, tutorial = true }
+    for _, t in ipairs(list) do
+        local action = t and t.action
+        if action == "read" then
+            names[#names + 1] = "something readable"
+        elseif action == "search" then
+            names[#names + 1] = "searchable spot"
+        elseif action == "warp" then
+            names[#names + 1] = "passage"
+        elseif action and not SKIP[action] then
+            names[#names + 1] = tostring(action)
+        end
+    end
+    return names
+end
+
+-- Ctrl+H: points of interest — interesting roots + triggers, nearest first.
+local function announce_pois()
+    local found = {}
+    each_remembered_tile(function(x, y, dx, dy, root)
+        if root and POI_ROOTS[root] then
+            found[#found + 1] = { d = text.dist(dx, dy),
+                s = root_name(root) .. ", " .. text.offset(dx, dy) }
+        end
+        for _, tn in ipairs(trigger_names_at(x, y)) do
+            found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
+        end
+    end)
+    if #found == 0 then
+        speech.say("No points of interest within " .. POI_RADIUS .. " tiles.", true)
+        return
+    end
+    table.sort(found, function(a, b) return a.d < b.d end)
+    local parts = {}
+    for i = 1, math.min(#found, 12) do parts[#parts + 1] = found[i].s end
+    speech.say(#found .. " points of interest: " .. table.concat(parts, "; "), true)
+end
+
+-- Terrain roots too common to be worth naming in the Alt+H sweep.
+local BORING_ROOTS = {
+    blank = true, floor = true, grass = true, woodFloor = true, path = true,
+    dirt = true, sand = true, stoneFloor = true, wall = true, mountains = true,
+}
+
+-- Alt+H: distinct terrain in range, grouped by kind, nearest instance + count.
+local function announce_terrain()
+    local groups = {}
+    each_remembered_tile(function(x, y, dx, dy, root)
+        if root and not BORING_ROOTS[root] then
+            local g = groups[root]
+            local d = text.dist(dx, dy)
+            if not g then
+                groups[root] = { count = 1, d = d, dx = dx, dy = dy }
+            else
+                g.count = g.count + 1
+                if d < g.d then g.d = d; g.dx = dx; g.dy = dy end
+            end
+        end
+    end)
+    local list = {}
+    for root, g in pairs(groups) do
+        list[#list + 1] = { d = g.d,
+            s = root_name(root) .. (g.count > 1 and (" times " .. g.count) or "")
+                .. ", nearest " .. text.offset(g.dx, g.dy) }
+    end
+    if #list == 0 then
+        speech.say("No notable terrain within " .. POI_RADIUS .. " tiles.", true)
+        return
+    end
+    table.sort(list, function(a, b) return a.d < b.d end)
+    local parts = {}
+    for i = 1, math.min(#list, 8) do parts[#parts + 1] = list[i].s end
+    speech.say("Terrain: " .. table.concat(parts, "; "), true)
+end
+
+-- ----------------------------------------------------------------- status --
+
+local function round(n)
+    return math.floor((tonumber(n) or 0) + 0.5)
+end
+
+local function announce_vitals()
+    local ps = playerStats
+    if not ps then return end
+    local parts = {
+        "Health " .. round(ps.health) .. " of " .. round(ps.maxHealth),
+        "poise " .. round(ps.poise) .. " of " .. round(ps.maxPoise),
+        "energy " .. round(ps.energy) .. " of " .. round(ps.maxEnergy),
+        "food " .. round(ps.food) .. " of " .. round(ps.maxFood),
+    }
+    speech.say(table.concat(parts, ", "), true)
+end
+
+local function announce_money()
+    if playerStats then speech.say(playerStats.money .. " guineas.", true) end
+end
+
+local function announce_position()
+    local p = player()
+    if not p then return end
+    local world = tostring(G_stateGame.currentWorldName or "unknown")
+    speech.say(world .. ", " .. p.position.x .. ", " .. p.position.y .. ".", true)
+end
+
+local function announce_turns()
+    speech.say("Turn " .. tostring(G_stateGame.playerTurns or 0) .. ".", true)
+end
+
+local function announce_modes()
+    local safety = G_stateGame.safetyModeOn
+    local sneak = playerStats and playerStats.isSneaking
+    speech.say("Safety " .. (safety and "on" or "off")
+        .. ", quiet " .. (sneak and "on" or "off") .. ".", true)
+end
+
+-- ------------------------------------------------------------ turn watcher --
+
+-- Called every pump frame; announces tile changes as the player moves.
+-- Differential: terrain root only when it CHANGED; triggers on the new tile
+-- always. Non-interrupting — it follows the game-log lines of the same turn.
+function M.watch_tick()
+    local p = player()
+    if not p or not p.position then W.px, W.py = nil, nil; return end
+    local x, y = p.position.x, p.position.y
+    if x == W.px and y == W.py then return end
+    local first = W.px == nil
+    W.px, W.py = x, y
+    if first then W.root = nil; return end   -- world entry; "Entering X" covers it
+
+    local parts = {}
+    local ok, root = pcall(p.getCurrentTileRoot, p)
+    root = ok and root or nil
+    if root ~= W.root then
+        W.root = root
+        local named = root and not BORING_ROOTS[root] and root_name(root) or nil
+        if named then parts[#parts + 1] = named end
+    end
+    for _, tn in ipairs(trigger_names_at(x, y)) do
+        parts[#parts + 1] = tn
+    end
+    if #parts > 0 then
+        speech.say(table.concat(parts, ", ") .. ".", false)
+    end
+end
+
+-- --------------------------------------------------------------- dispatch --
+
+local ACTIONS = {
+    hostiles = announce_hostiles,
+    pois = announce_pois,
+    terrain = announce_terrain,
+    vitals = announce_vitals,
+    money = announce_money,
+    position = announce_position,
+    turns = announce_turns,
+    modes = announce_modes,
+    repeat_last = function() end,   -- reserved
+}
+
+function M.dispatch(cmd)
+    if cmd.action == "buffer_switch" then
+        speech.say(buffers.switch(cmd.dir), true)
+        return
+    elseif cmd.action == "buffer_step" then
+        speech.say(buffers.step(cmd.dir), true)
+        return
+    end
+    local fn = ACTIONS[cmd.action]
+    if fn then
+        local ok, err = pcall(fn)
+        if not ok then speech.log("action " .. cmd.action .. " failed: " .. tostring(err)) end
+    end
+end
+
+return M
