@@ -79,14 +79,21 @@ function M.on_move(dx, dy)
     end
     local adx, ady = dy, -dx      -- one flank (heading rotated CCW)
     local bdx, bdy = -dy, dx      -- the other
-    local aw = wall_distance(px, py, adx, ady) or (MAX_DIST + 1)
-    local bw = wall_distance(px, py, bdx, bdy) or (MAX_DIST + 1)
-    local heading = dx .. "," .. dy
-    if E.prev and E.prev.heading == heading then
-        if aw ~= E.prev.aw then synth.width_cue_world(world_dir(adx, ady), aw > E.prev.aw) end
-        if bw ~= E.prev.bw then synth.width_cue_world(world_dir(bdx, bdy), bw > E.prev.bw) end
+    local widths = {}
+    widths[world_dir(adx, ady)] = wall_distance(px, py, adx, ady) or (MAX_DIST + 1)
+    widths[world_dir(bdx, bdy)] = wall_distance(px, py, bdx, bdy) or (MAX_DIST + 1)
+
+    -- History is keyed by flank AXIS + world direction, so a 180-degree turn
+    -- (same flank axis, same world dirs) keeps comparing; only a 90-degree
+    -- turn — where the axes genuinely change meaning — resets the baseline.
+    local axis = (dx ~= 0) and "ns" or "ew"
+    if E.prev and E.prev.axis == axis then
+        for dir, w in pairs(widths) do
+            local pw = E.prev.widths[dir]
+            if pw and w ~= pw then synth.width_cue_world(dir, w > pw) end
+        end
     end
-    E.prev = { heading = heading, aw = aw, bw = bw }
+    E.prev = { axis = axis, widths = widths }
 end
 
 return M
