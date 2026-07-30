@@ -761,9 +761,93 @@ function M.install()
     end)
 end
 
+-- "\" on the Overworld: weather report — amber fog proximity, wind, rain,
+-- and the calendar moon. Amber matters because standing in it accrues
+-- madness; wind because the fog field drifts with it.
+local AMBER_SCAN = 15
+local WIND_NAMES = { "north", "east", "south", "west" }
+
+local function compass(dx, dy)
+    local parts = {}
+    if dy ~= 0 then parts[#parts + 1] = math.abs(dy) .. (dy > 0 and " south" or " north") end
+    if dx ~= 0 then parts[#parts + 1] = math.abs(dx) .. (dx > 0 and " east" or " west") end
+    if #parts == 0 then return "here" end
+    return table.concat(parts, ", ")
+end
+
+-- Nearest cell (Chebyshev rings outward) whose amber flag equals want_amber.
+local function nearest_amber(px, py, want_amber)
+    local map = require("ma_map")
+    for r = 0, AMBER_SCAN do
+        local best
+        for dy = -r, r do
+            for dx = -r, r do
+                if math.max(math.abs(dx), math.abs(dy)) == r
+                    and map.is_amber(px + dx, py + dy) == want_amber then
+                    local d = dx * dx + dy * dy
+                    if not best or d < best.d then best = { dx = dx, dy = dy, d = d } end
+                end
+            end
+        end
+        if best then return best.dx, best.dy end
+    end
+    return nil
+end
+
+local function announce_weather()
+    local p = player()
+    if not p then return end
+    local map = require("ma_map")
+    local px, py = p.position.x, p.position.y
+    local parts = {}
+
+    if map.is_amber(px, py) then
+        local dx, dy = nearest_amber(px, py, false)
+        parts[#parts + 1] = dx and ("Amber fog here, clear " .. compass(dx, dy))
+            or "Amber fog here"
+    else
+        local dx, dy = nearest_amber(px, py, true)
+        parts[#parts + 1] = dx and ("Amber fog " .. compass(dx, dy))
+            or ("No amber fog within " .. AMBER_SCAN)
+    end
+
+    local w = G_stateGame.weather
+    if w and w.windDirection then
+        parts[#parts + 1] = "Wind " .. (WIND_NAMES[w.windDirection] or "unknown")
+    end
+
+    local rain = 0
+    pcall(function() rain = w:getRainFraction() end)
+    if rain < 0.05 then
+        parts[#parts + 1] = "Clear skies"
+    elseif rain < 0.33 then
+        parts[#parts + 1] = "Light rain"
+    elseif rain < 0.66 then
+        parts[#parts + 1] = "Rain"
+    else
+        parts[#parts + 1] = "Heavy rain"
+    end
+
+    pcall(function()
+        local cal = require("calendar")
+        local date = cal.getMainDateAsText()
+        if date == "Date Unknown" then
+            -- Post-game sun/moon cycle: the date is hidden but day/night is real.
+            parts[#parts + 1] = cal.isDay() and "Daytime" or "Night"
+        else
+            parts[#parts + 1] = date
+            local god = cal.getGodNameFromMoon(cal.worldMoon)
+            if god then parts[#parts + 1] = "Moon of " .. god end
+        end
+    end)
+
+    speech.say(table.concat(parts, ". ") .. ".", true)
+end
+
 -- --------------------------------------------------------------- dispatch --
 
 local ACTIONS = {
+    weather = announce_weather,
     hostiles = announce_hostiles,
     pois = announce_pois,
     terrain = announce_terrain,

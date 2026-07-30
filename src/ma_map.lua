@@ -324,6 +324,17 @@ function M.light_radius_at(x, y)
     return tonumber(data.lightRadius) or 0
 end
 
+-- Is the cell at world x,y covered by amber fog? (Standing in amber accrues
+-- the "mad" status; the field drifts with the wind.) Unknown/out-of-window
+-- reads as false.
+function M.is_amber(x, y)
+    local map = M.game_map()
+    local mx, my = M.to_map(x, y)
+    if not map or not mx then return false end
+    local ok, v = pcall(map.getIsAmberOnMapXYZeroIndexed, map, mx, my)
+    return (ok and v) and true or false
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end

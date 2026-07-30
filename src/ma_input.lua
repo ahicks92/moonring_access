@@ -242,6 +242,17 @@ function M.claim(kb)
                 eat(kb, "/")
             end
 
+            -- Plain "\" = weather report, Overworld and Zoom only. The key is
+            -- reserved for a future in-map use, so it must pass through
+            -- everywhere else (towns, dungeons, interiors).
+            local wd = G_stateGame.currentWorldData
+            if not blocked and kb.justPressedDictionary["\\"]
+                and (G_stateGame.currentWorldName == gOverworldName
+                    or (wd and wd.isZoom)) then
+                push({ kind = "app", action = "weather", mods = mods })
+                eat(kb, "\\")
+            end
+
             -- Scanner: PageUp/Down entries, Ctrl+PageUp/Down categories,
             -- Home goto, End rescan.
             if extra["pageup"] then
