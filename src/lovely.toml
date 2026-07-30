@@ -47,6 +47,42 @@ name = "ma_app"
 
 [[patches]]
 [patches.module]
+source = "ma_map.lua"
+before = "main.lua"
+name = "ma_map"
+
+[[patches]]
+[patches.module]
+source = "ma_synth.lua"
+before = "main.lua"
+name = "ma_synth"
+
+[[patches]]
+[patches.module]
+source = "ma_shapes.lua"
+before = "main.lua"
+name = "ma_shapes"
+
+[[patches]]
+[patches.module]
+source = "ma_cursor.lua"
+before = "main.lua"
+name = "ma_cursor"
+
+[[patches]]
+[patches.module]
+source = "ma_echo.lua"
+before = "main.lua"
+name = "ma_echo"
+
+[[patches]]
+[patches.module]
+source = "ma_scanner.lua"
+before = "main.lua"
+name = "ma_scanner"
+
+[[patches]]
+[patches.module]
 source = "ma_id.lua"
 before = "main.lua"
 name = "ma_id"

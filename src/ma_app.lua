@@ -240,6 +240,9 @@ function M.watch_tick()
     if #parts > 0 then
         speech.say(table.concat(parts, ", ") .. ".", false)
     end
+
+    -- The wall echo fires on every real move (the primary spatial channel).
+    pcall(function() require("ma_echo").on_move() end)
 end
 
 -- --------------------------------------------------------------- dispatch --
@@ -253,7 +256,17 @@ local ACTIONS = {
     position = announce_position,
     turns = announce_turns,
     modes = announce_modes,
-    repeat_last = function() end,   -- reserved
+    cursor_step = function(cmd) require("ma_cursor").step(cmd.dir, cmd.skip) end,
+    cursor_read = function() require("ma_cursor").read() end,
+    cursor_recenter = function() require("ma_cursor").recenter() end,
+    scan_entry = function(cmd) require("ma_scanner").step_entry(cmd.dir) end,
+    scan_cat = function(cmd) require("ma_scanner").step_category(cmd.dir) end,
+    scan_goto = function() require("ma_scanner").goto_selected() end,
+    scan_rescan = function() require("ma_scanner").rescan(false) end,
+    echo_toggle = function()
+        local on = require("ma_echo").toggle()
+        speech.say("Wall echo " .. (on and "on." or "off."), true)
+    end,
 }
 
 function M.dispatch(cmd)
@@ -266,7 +279,7 @@ function M.dispatch(cmd)
     end
     local fn = ACTIONS[cmd.action]
     if fn then
-        local ok, err = pcall(fn)
+        local ok, err = pcall(fn, cmd)
         if not ok then speech.log("action " .. cmd.action .. " failed: " .. tostring(err)) end
     end
 end

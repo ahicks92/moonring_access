@@ -25,6 +25,12 @@ local MODULES = {
     { name = "ma_dispatcher",  file = "Mods/MoonringAccess/ma_dispatcher.lua" },
     { name = "ma_input",       file = "Mods/MoonringAccess/ma_input.lua" },
     { name = "ma_overlays",    file = "Mods/MoonringAccess/ma_overlays.lua" },
+    { name = "ma_map",         file = "Mods/MoonringAccess/ma_map.lua" },
+    { name = "ma_synth",       file = "Mods/MoonringAccess/ma_synth.lua" },
+    { name = "ma_shapes",      file = "Mods/MoonringAccess/ma_shapes.lua" },
+    { name = "ma_cursor",      file = "Mods/MoonringAccess/ma_cursor.lua" },
+    { name = "ma_echo",        file = "Mods/MoonringAccess/ma_echo.lua" },
+    { name = "ma_scanner",     file = "Mods/MoonringAccess/ma_scanner.lua" },
     { name = "ma_app",         file = "Mods/MoonringAccess/ma_app.lua" },
     { name = "moonring_access", file = "Mods/MoonringAccess/moonring_access.lua" },
 }
@@ -101,6 +107,12 @@ function M.pump(dt)
         st.pending_say = {}
     end
     pcall(app.watch_tick)
+
+    -- Spatial-tool housekeeping: cursor follow (per game turn), scanner
+    -- world-change invalidation, finished-Source pruning.
+    pcall(function() require("ma_cursor").follow_tick() end)
+    pcall(function() require("ma_scanner").watch_tick() end)
+    pcall(function() require("ma_synth").prune() end)
 
     if st.pending_reload then
         st.pending_reload = false

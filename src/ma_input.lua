@@ -130,7 +130,7 @@ function M.claim(kb)
     if in_game then
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
-            t = "turns", q = "modes",
+            t = "turns", q = "modes", e = "echo_toggle",
         }
         if mods.ctrl then
             for letter, action in pairs(CHORDS) do
@@ -152,6 +152,50 @@ function M.claim(kb)
                 push({ kind = "app", action = "hostiles", mods = mods })
                 eat(kb, "h")
             end
+        end
+
+        -- Exploration cursor + scanner (gameplay only, never while an overlay
+        -- or a game menu owns the screen).
+        if not dispatcher.engaged() then
+            local blocked = false
+            local ok, b = pcall(G_stateGame.isUIBlockingPlayerMovement, G_stateGame)
+            if ok then blocked = b and true or false end
+
+            if not blocked and not mods.ctrl then
+                -- Plain/Shift arrows: cursor step / skip. WASD stays player
+                -- movement; arrows are the mod's (redundant for walking).
+                for _, arrow in ipairs({ "up", "down", "left", "right" }) do
+                    if kb.justPressedDictionary[arrow] then
+                        push({ kind = "app", action = "cursor_step", dir = arrow,
+                            skip = mods.shift, mods = mods })
+                    end
+                    eat(kb, arrow)   -- held state too, so movement never sees arrows
+                end
+            end
+
+            -- Numpad ring (game never scans these).
+            local NUMPAD_DIRS = { kp8 = "up", kp2 = "down", kp4 = "left", kp6 = "right" }
+            for key, dir in pairs(NUMPAD_DIRS) do
+                if extra[key] then
+                    push({ kind = "app", action = "cursor_step", dir = dir,
+                        skip = mods.shift, mods = mods })
+                end
+            end
+            if extra["kp5"] then push({ kind = "app", action = "cursor_read", mods = mods }) end
+            if extra["kp0"] then push({ kind = "app", action = "cursor_recenter", mods = mods }) end
+
+            -- Scanner: PageUp/Down entries, Ctrl+PageUp/Down categories,
+            -- Home goto, End rescan.
+            if extra["pageup"] then
+                push({ kind = "app", action = mods.ctrl and "scan_cat" or "scan_entry",
+                    dir = "up", mods = mods })
+            end
+            if extra["pagedown"] then
+                push({ kind = "app", action = mods.ctrl and "scan_cat" or "scan_entry",
+                    dir = "down", mods = mods })
+            end
+            if extra["home"] then push({ kind = "app", action = "scan_goto", mods = mods }) end
+            if extra["end"] then push({ kind = "app", action = "scan_rescan", mods = mods }) end
         end
     end
 
