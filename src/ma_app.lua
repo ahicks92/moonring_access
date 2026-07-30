@@ -147,13 +147,14 @@ local function announce_pois()
         end
     end)
     if #found == 0 then
-        speech.say("No points of interest within " .. POI_RADIUS .. " tiles.", true)
+        speech.say("Nothing of interest in sight.", true)
         return
     end
     table.sort(found, function(a, b) return a.d < b.d end)
     local parts = {}
     for i = 1, math.min(#found, 12) do parts[#parts + 1] = found[i].s end
-    speech.say(#found .. " points of interest: " .. table.concat(parts, "; "), true)
+    if #found > 12 then parts[#parts + 1] = "and " .. (#found - 12) .. " more" end
+    speech.say(table.concat(parts, ", ") .. ".", true)
 end
 
 -- Terrain roots too common to be worth naming in the Alt+H sweep.
@@ -274,7 +275,8 @@ local function announce_statuses()
         local flag = G_Globals.statusNameToStatus[key]
         local name = STATUS_NAMES[key] or key
         if flag and p[flag] then
-            active[#active + 1] = name
+            local v = type(p[key]) == "number" and p[key] or 0
+            active[#active + 1] = name .. ", " .. math.min(100, math.floor(v * 100 + 0.5)) .. " percent left"
         elseif type(p[key]) == "number" and p[key] > 0 then
             building[#building + 1] = name .. " " .. math.floor(p[key] * 100 + 0.5) .. " percent"
         end
@@ -285,6 +287,10 @@ local function announce_statuses()
     if #parts == 0 then parts[1] = "No status effects." end
     speech.say(table.concat(parts, ". ") .. ".", true)
 end
+
+-- (Active statuses have no turn counter: the same 0..1 value drains at a
+-- condition-dependent rate — wet blocks rot decay, oil blocks flame decay —
+-- so "percent left" is the only honest countdown.)
 
 -- Per-frame watcher: announce activations, endings, and upward quarter-band
 -- changes while a bar is building (the "watch the bar" information; falls
@@ -299,11 +305,11 @@ function M.status_tick()
         local st = W.status[key]
         if not st then st = { band = 0, active = false }; W.status[key] = st end
 
+        -- Activation and expiry are announced by the GAME's own log lines
+        -- ("You are rotten." / "You are no longer rotten."), which we
+        -- already speak — only track the edge here, never voice it.
         local is_active = (flag and p[flag]) and true or false
-        if is_active ~= st.active then
-            st.active = is_active
-            speech.say(is_active and (name .. " has taken hold!") or (name .. " over."), false)
-        end
+        st.active = is_active
 
         local v = type(p[key]) == "number" and p[key] or 0
         local band = is_active and 0 or math.floor(math.min(v, 0.99) * 4)   -- 0..3 quarters
