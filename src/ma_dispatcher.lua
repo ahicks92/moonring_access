@@ -125,11 +125,15 @@ local function apply_nav(graph, state, ctx, message, command)
             { message = message, moved = moved, spoke_label = true })
     end
 
-    -- A value control (a slider) intercepts horizontal input to adjust instead
-    -- of moving focus; vertical input always navigates.
+    -- A value control (a slider) intercepts plain horizontal MOVES to adjust
+    -- instead of moving focus (Shift = coarse step); vertical input always
+    -- navigates. Home/End are never adjust — they must reach move_to_edge,
+    -- or any control with a horizontal adjust (every inventory item's
+    -- category switch, sliders) swallows them.
     local dir = command.dir
-    if (dir == "left" or dir == "right")
-        and graph:try_horizontal_adjust(ctx, dir == "right" and 1 or -1, kind == "move_to_edge") then
+    if kind == "move" and (dir == "left" or dir == "right")
+        and graph:try_horizontal_adjust(ctx, dir == "right" and 1 or -1,
+            command.mods and command.mods.shift) then
         return { message = message }
     end
 
