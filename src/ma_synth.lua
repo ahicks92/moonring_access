@@ -117,6 +117,34 @@ function M.play(events)
     if not ok then require("ma_speech").log("synth error: " .. tostring(err)) end
 end
 
+-- Terrain-differentiated footstep cue: what the game designed and abandoned
+-- (its puddle pitch-shift is commented out at actor.lua:6281). Family by
+-- terrain root; quiet, short, distinct.
+local STEP_FAMILIES = {
+    wood = { kind = "tone", freq = 170, dur = 0.035, vol = 0.22 },
+    soft = { kind = "noise", freq = 420, q = 2, dur = 0.045, vol = 0.3 },
+    stone = { kind = "tone", freq = 540, dur = 0.02, vol = 0.18 },
+    water = { kind = "tone", freq = 640, dur = 0.03, vol = 0.22, second = { kind = "tone", freq = 920, dur = 0.03, at = 0.035, vol = 0.18 } },
+    sand = { kind = "noise", freq = 300, q = 1.5, dur = 0.05, vol = 0.26 },
+}
+
+local ROOT_TO_FAMILY = {
+    woodFloor = "wood", floorboards = "wood", tileSqueak = "wood", bridge = "wood",
+    grass = "soft", bushes = "soft", fern = "soft", swamp = "soft", trees = "soft",
+    dirt = "soft", mud = "soft",
+    floor = "stone", stoneFloor = "stone", path = "stone", rock = "stone",
+    hills = "stone", mountains = "stone",
+    water = "water", puddle = "water", sea = "water", shallows = "water",
+    sand = "sand", shore = "sand",
+}
+
+function M.step_cue(root)
+    local fam = STEP_FAMILIES[ROOT_TO_FAMILY[root or ""] or "stone"]
+    local events = { { kind = fam.kind, freq = fam.freq, q = fam.q, dur = fam.dur, vol = fam.vol } }
+    if fam.second then events[#events + 1] = fam.second end
+    M.play(events)
+end
+
 -- Simple named cues.
 function M.cue(name)
     if name == "cursor_ground" then

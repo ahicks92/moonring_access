@@ -135,6 +135,7 @@ function M.claim(kb)
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
             t = "turns", q = "modes", e = "echo_toggle", c = "character",
+            f = "steps_toggle",
         }
         if mods.ctrl then
             for letter, action in pairs(CHORDS) do

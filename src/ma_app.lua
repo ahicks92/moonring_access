@@ -241,7 +241,11 @@ function M.watch_tick()
         speech.say(table.concat(parts, ", ") .. ".", false)
     end
 
-    -- The wall echo fires on every real move (the primary spatial channel).
+    -- The wall echo fires on every real move (the primary spatial channel),
+    -- preceded by a terrain-differentiated step cue.
+    if W.steps_enabled ~= false then
+        pcall(function() require("ma_synth").step_cue(root) end)
+    end
     pcall(function() require("ma_echo").on_move() end)
 end
 
@@ -268,6 +272,10 @@ local ACTIONS = {
         speech.say("Wall echo " .. (on and "on." or "off."), true)
     end,
     talk_status = function() require("ma_talk").status() end,
+    steps_toggle = function()
+        W.steps_enabled = (W.steps_enabled == false)
+        speech.say("Step sounds " .. (W.steps_enabled ~= false and "on." or "off."), true)
+    end,
     character = function()
         local ps = playerStats
         if not ps then return end
