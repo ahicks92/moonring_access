@@ -155,6 +155,27 @@ local function announce_pois()
             end
         end
     end)
+    -- Overworld hoofprints (see discover_landmarks for the channel note).
+    pcall(function()
+        if tostring(G_stateGame.currentWorldName) ~= "Overworld" then return end
+        local p = player()
+        local range = (G_Globals and G_Globals.huntDetectionDistanceWolf) or 8
+        local function prey_spot(animal)
+            if not animal or not animal.position then return end
+            local dx, dy = animal.position.x - p.position.x, animal.position.y - p.position.y
+            local d = math.max(math.abs(dx), math.abs(dy))
+            if d < range then
+                found[#found + 1] = { d = d, s = "hoofprints, " .. text.offset(dx, dy) }
+            end
+        end
+        prey_spot(playerStats.foodAnimal)
+        local sleathen_alive = true
+        pcall(function()
+            sleathen_alive = not G_stateGame.speechArea:isPropertyNonZero("killed_sleathen")
+        end)
+        if sleathen_alive then prey_spot(playerStats.sleathen) end
+    end)
+
     if #found == 0 then
         speech.say("Nothing of interest in sight.", true)
         return
@@ -406,6 +427,84 @@ local function discover_landmarks()
             end
         end
     end
+    -- Overworld prey: the game draws "pawprint" PARTICLES at prey positions
+    -- within hunt-detection range — a channel nothing else reads. Same
+    -- range gate as the particle spawn; both animals speak as plain
+    -- "hoofprints" (the prints are visually identical for everyone).
+    pcall(function()
+        if tostring(G_stateGame.currentWorldName) ~= "Overworld" then return end
+        local range = (G_Globals and G_Globals.huntDetectionDistanceWolf) or 8
+        local function prey_spot(animal)
+            if not animal or not animal.position then return end
+            local dx, dy = animal.position.x - px, animal.position.y - py
+            local d = math.max(math.abs(dx), math.abs(dy))
+            if d < range then
+                local key = "prey:" .. animal.position.x .. "," .. animal.position.y
+                if not seen[key] then
+                    seen[key] = true
+                    found[#found + 1] = { d = d,
+                        s = "hoofprints, " .. text.offset(dx, dy) }
+                end
+            end
+        end
+        prey_spot(playerStats.foodAnimal)
+        local sleathen_alive = true
+        pcall(function()
+            sleathen_alive = not G_stateGame.speechArea:isPropertyNonZero("killed_sleathen")
+        end)
+        if sleathen_alive then prey_spot(playerStats.sleathen) end
+
+        -- Gatherable icons: the game checks these predicates in a 1-tile
+        -- ring and draws icon particles; the "here!" notices are rising
+        -- text. Same predicates, same radius (no super-radar): on-tile
+        -- always speaks, adjacent speaks once per position.
+        local GATHER = {
+            { fn = "isHerbAtWorldXY", name = "herb" },
+            { fn = "isBerryAtWorldXY", name = "berries" },
+            { fn = "isKindlingAtWorldXY", name = "kindling" },
+            { fn = "isTearAtWorldXY", name = "something odd" },
+            { fn = "isWitchesHerbAtWorldXY", name = "strange plant" },
+        }
+        for _, g in ipairs(GATHER) do
+            if type(G_stateGame[g.fn]) == "function" then
+                for dy = -1, 1 do
+                    for dx = -1, 1 do
+                        local x, y = px + dx, py + dy
+                        local ok, hit = pcall(G_stateGame[g.fn], G_stateGame, x, y)
+                        if ok and hit then
+                            if dx == 0 and dy == 0 then
+                                found[#found + 1] = { d = 0, s = g.name .. " here" }
+                            else
+                                local key = g.name .. ":" .. x .. "," .. y
+                                if not seen[key] then
+                                    seen[key] = true
+                                    found[#found + 1] = { d = 1,
+                                        s = g.name .. ", " .. text.offset(dx, dy) }
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        -- The fish ripple (viewport-parity radius).
+        pcall(function()
+            if playerStats.isFishPresent and playerStats.fishPositionX then
+                local dx = playerStats.fishPositionX - px
+                local dy = playerStats.fishPositionY - py
+                local d = math.max(math.abs(dx), math.abs(dy))
+                if d <= 7 then
+                    local key = "fish:" .. playerStats.fishPositionX .. "," .. playerStats.fishPositionY
+                    if not seen[key] then
+                        seen[key] = true
+                        found[#found + 1] = { d = d, s = "water ripples, " .. text.offset(dx, dy) }
+                    end
+                end
+            end
+        end)
+    end)
+
     -- Merged area exits: announce a run once, when ANY of its tiles becomes
     -- visible, with the offset to its interior-connected anchor.
     for _, e in ipairs(ma_map.area_exits()) do
