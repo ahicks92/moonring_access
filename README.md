@@ -22,8 +22,9 @@ Q quiet, R ranged, I inventory, Escape menu bar, ` console...). The mod adds:
 - Exploration cursor (gameplay): Arrow keys or numpad 8/4/6/2 step;
   Shift+direction skips to the next different tile; numpad 5 reads the cursor
   tile in full (during a conversation it instead reads what you've typed plus
-  the visible cloud words); numpad 0 recenters on you. The cursor re-homes to
-  you each game turn.
+  the visible cloud words); numpad 0 or slash recenters on you. The cursor
+  re-homes to you each game turn. (The numpad is never required — every
+  numpad key has or will get a main-keyboard twin.)
 - Wall echo: after each step, four noise pings sound the distance to walls —
   left/right panned, north a fifth higher, south a fifth lower, closer =
   sooner and louder. Ctrl+E toggles.

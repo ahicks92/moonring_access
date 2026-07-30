@@ -200,6 +200,13 @@ function M.claim(kb)
                 push({ kind = "app", action = talking and "talk_status" or "cursor_read", mods = mods })
             end
             if extra["kp0"] then push({ kind = "app", action = "cursor_recenter", mods = mods }) end
+            -- "/" = cursor recenter on the main keyboard (numpad must stay
+            -- optional). Unbound in the game; claimed only when no text-entry
+            -- surface could want the character.
+            if not blocked and kb.justPressedDictionary["/"] then
+                push({ kind = "app", action = "cursor_recenter", mods = mods })
+                eat(kb, "/")
+            end
 
             -- Scanner: PageUp/Down entries, Ctrl+PageUp/Down categories,
             -- Home goto, End rescan.
