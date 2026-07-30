@@ -699,8 +699,11 @@ function M.watch_tick()
     if first then W.root = nil; W.reveals = nil; return end   -- world entry; "Entering X" covers it
 
     local m = MB.new()
-    local ok, root = pcall(p.getCurrentTileRoot, p)
-    root = ok and root or nil
+    -- Read the root LIVE at the new coords. getCurrentTileRoot returns the
+    -- actor's cached tileRoot, refreshed at the TOP of each fixed tick —
+    -- position changes mid-tick, so right after a move the cache still
+    -- holds the departed tile and we'd speak one tile behind.
+    local root = require("ma_map").root(x, y)
     local root_changed = root ~= W.root
     W.root = root
     -- Path tiles speak their SHAPE (Factorio Access pipe logic). Stepping
