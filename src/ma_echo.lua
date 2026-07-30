@@ -21,18 +21,6 @@ local E = st.echo
 local M = {}
 
 local MAX_DIST = 8
-local SEC_PER_TILE = 0.035
-local BASE = 261.63                       -- C4 for east/west
-local UP = BASE * math.pow(2, 7 / 12)     -- fifth up for north
-local DOWN = BASE * math.pow(2, -7 / 12)  -- fifth down for south
-local PING = 0.06
-
-local RAYS = {
-    { dx = 0, dy = -1, pan = 0, freq = UP },     -- north
-    { dx = 0, dy = 1, pan = 0, freq = DOWN },    -- south
-    { dx = -1, dy = 0, pan = -1, freq = BASE },  -- west
-    { dx = 1, dy = 0, pan = 1, freq = BASE },    -- east
-}
 
 local function wall_distance(px, py, dx, dy)
     for d = 1, MAX_DIST do
@@ -56,22 +44,14 @@ function M.on_move()
     if not p or not p.position then return end
     local px, py = p.position.x, p.position.y
 
-    local events = {}
-    for _, ray in ipairs(RAYS) do
-        local d = wall_distance(px, py, ray.dx, ray.dy)
-        if d then
-            events[#events + 1] = {
-                kind = "noise",
-                freq = ray.freq,
-                q = 30,
-                dur = PING,
-                at = (d - 1) * SEC_PER_TILE,
-                pan = ray.pan,
-                vol = 0.45 * math.pow(10, -3 * (d - 1) / 20),
-            }
-        end
-    end
-    synth.play(events)
+    -- All tuning (pitches, ADSR, distance law, loudness trims, decorrelated
+    -- noise pools) lives in ma_synth's WallEchoCue port.
+    synth.play_walls({
+        up = wall_distance(px, py, 0, -1),
+        down = wall_distance(px, py, 0, 1),
+        left = wall_distance(px, py, -1, 0),
+        right = wall_distance(px, py, 1, 0),
+    })
 end
 
 return M

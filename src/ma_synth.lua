@@ -1,9 +1,18 @@
--- ma_synth.lua — mod-authored audio cues: stereo PCM rendered into SoundData
--- and played through our own Source pool (port of Tanglebeep's Core/Audio
--- concepts: constant-power pan + interaural time delay, band-passed noise,
--- ADSR-ish envelopes). Independent of the game's audio path, so the game's
--- same-frame sound dedup and volume plumbing never touch cues. Master mute
--- (love.audio.setVolume(0)) still silences them, which is what test runs want.
+-- ma_synth.lua — mod-authored audio cues, a faithful Lua port of Tanglebeep's
+-- Core/Audio grain pipeline (GrainTimeline/PanLaw/AllpassFractionalDelay/
+-- NoisePool/AdsrGrain/WallEchoCue+Synth).
+--
+-- The load-bearing subtleties, learned the hard way:
+--   * DECORRELATION: the left and right wall pings draw DIFFERENT slices from
+--     a shared pre-filtered noise pool. Two identical signals panned hard
+--     left/right fuse into one phantom-center image; decorrelated noise stays
+--     two sources. (A first draft used per-frequency deterministic noise —
+--     identical ears — and the whole echo collapsed to mono.)
+--   * RMS NORMALIZATION: a Q=30 bandpass passes a ~9 Hz sliver of white
+--     noise's energy; pools are normalized to a target RMS so Q changes
+--     timbre, not loudness.
+--   * ITD: the far ear gets the signal |pan| * 0.7 ms later, as an integer
+--     sample shift plus a first-order allpass for the fractional remainder.
 
 local hooks = require("ma_hooks")
 local st = hooks.state
@@ -13,9 +22,286 @@ local S = st.synth
 local M = {}
 
 local RATE = 44100
-local MAX_ITD = 0.0007   -- seconds of far-ear delay at full pan
 
--- Keep playing Sources referenced so the GC can't stop them; pruned per pump.
+-- ==================== WallEchoCue constants (Tanglebeep) ====================
+local WALL = {
+    base_hz = 261.63,               -- C4, left/right walls
+    vertical_semitones = 7,         -- fifth up = north, fifth down = south
+    q = 30,
+    ms_per_tile = 35,
+    db_per_tile = -3,
+    initial_volume = 0.8,
+    horizontal_gain = 1.0,
+    up_gain = 1.0,
+    down_gain = 1.3,                -- lowest band reads quieter; boost by ear
+    attack = 0.002, decay = 0.030, sustain = 0.060, release = 0.01,
+    sustain_level = 0.8,
+    target_rms = 0.3,
+    pool_seconds = 2.0,
+    warmup_samples = 128,
+    noise_seed = 12345,
+}
+WALL.tone_seconds = WALL.attack + WALL.decay + WALL.sustain + WALL.release
+WALL.up_hz = WALL.base_hz * math.pow(2, WALL.vertical_semitones / 12)
+WALL.down_hz = WALL.base_hz * math.pow(2, -WALL.vertical_semitones / 12)
+
+local MAX_ITD = 0.0007              -- seconds far-ear delay at |pan| = 1
+local ALLPASS_FLUSH = 32            -- frames of ringout tail
+
+-- ============================ DSP primitives ================================
+
+-- RBJ bandpass (constant 0 dB peak gain), one sample at a time.
+local function bandpass_new(freq, q)
+    local w0 = 2 * math.pi * freq / RATE
+    local alpha = math.sin(w0) / (2 * q)
+    local b0, b2 = alpha, -alpha
+    local a0, a1, a2 = 1 + alpha, -2 * math.cos(w0), 1 - alpha
+    local x1, x2, y1, y2 = 0, 0, 0, 0
+    return function(x)
+        local y = (b0 / a0) * x + (b2 / a0) * x2 - (a1 / a0) * y1 - (a2 / a0) * y2
+        x2, x1 = x1, x
+        y2, y1 = y1, y
+        return y
+    end
+end
+
+-- ADSR envelope value at time t (seconds); segments sum to the grain length.
+local function adsr(t, a, d, s, r, sustain_level)
+    if t < 0 then return 0 end
+    if t < a then return t / a end
+    t = t - a
+    if t < d then return 1 + (sustain_level - 1) * (t / d) end
+    t = t - d
+    if t < s then return sustain_level end
+    t = t - s
+    if t < r then return sustain_level * (1 - t / r) end
+    return 0
+end
+
+-- ============================ Noise pools ===================================
+-- One pool per band: filter pool_seconds of white noise once (discarding the
+-- filter's warm-up transient), RMS-normalize, then hand out successive
+-- non-overlapping slices. The LCG state persists across refills so every
+-- slice is a fresh draw.
+
+local function pool_refill(pool)
+    local n = math.floor(WALL.pool_seconds * RATE)
+    local total = n + WALL.warmup_samples
+    local bp = bandpass_new(pool.center, WALL.q)
+    local seed = pool.seed
+    local data = {}
+    for i = 0, total - 1 do
+        seed = (seed * 48271) % 2147483647
+        data[i] = bp((seed / 2147483647) * 2 - 1)
+    end
+    pool.seed = seed
+    -- Drop warmup, RMS-normalize the rest to the target.
+    local out = {}
+    local sum = 0
+    for i = 0, n - 1 do
+        local v = data[i + WALL.warmup_samples]
+        out[i] = v
+        sum = sum + v * v
+    end
+    local rms = math.sqrt(sum / n)
+    if rms > 1e-9 then
+        local scale = WALL.target_rms / rms
+        for i = 0, n - 1 do out[i] = out[i] * scale end
+    end
+    pool.data = out
+    pool.len = n
+    pool.cursor = 0
+end
+
+local function pool_get(name, center)
+    S.pools = S.pools or {}
+    local pool = S.pools[name]
+    if not pool then
+        pool = { center = center, seed = WALL.noise_seed }
+        pool_refill(pool)
+        S.pools[name] = pool
+    end
+    return pool
+end
+
+-- Take a slice of `seconds`, advancing the cursor (a fresh draw every call).
+local function pool_take(pool, seconds)
+    local count = math.min(math.ceil(seconds * RATE), pool.len)
+    if pool.cursor + count > pool.len then pool_refill(pool) end
+    local slice = { data = pool.data, offset = pool.cursor, count = count }
+    pool.cursor = pool.cursor + count
+    return slice
+end
+
+-- ========================= Timeline rendering ===============================
+-- placements: { grain = fn(i) -> sample for grain-local frame i,
+--               frames = grain length, start = seconds, pan = -1..1,
+--               gain = linear }
+
+local function render_placements(placements)
+    local total = 0
+    for _, p in ipairs(placements) do
+        local frames = math.floor(p.start * RATE) + p.frames
+        if frames > total then total = frames end
+    end
+    if total == 0 then return nil end
+    local padding = math.ceil(MAX_ITD * RATE) + ALLPASS_FLUSH
+    local n = total + padding
+    local left, right = {}, {}
+    for i = 0, n - 1 do left[i] = 0; right[i] = 0 end
+
+    for _, p in ipairs(placements) do
+        local pan = math.max(-1, math.min(1, p.pan or 0))
+        -- Constant-power pan law.
+        local theta = (pan + 1) * math.pi / 4
+        local lg = math.cos(theta) * (p.gain or 1)
+        local rg = math.sin(theta) * (p.gain or 1)
+
+        -- ITD split: integer shift + allpass fractional remainder, with the
+        -- fraction held in [0.5, 1.5) so the allpass pole stays tame.
+        local delay_samples = math.abs(pan) * MAX_ITD * RATE
+        local int_delay, ap_a, ap_x, ap_y = 0, nil, 0, 0
+        if delay_samples >= 0.5 then
+            int_delay = math.floor(delay_samples - 0.5)
+            local frac = delay_samples - int_delay
+            ap_a = (1 - frac) / (1 + frac)
+        end
+        local far_is_left = pan > 0
+        local far_is_right = pan < 0
+
+        local first = math.floor(p.start * RATE)
+        for i = 0, p.frames - 1 do
+            local s = p.grain(i)
+            local fi = first + i
+            if fi >= 0 and fi < n then
+                if far_is_left or far_is_right then
+                    local far = s
+                    if ap_a then
+                        far = ap_a * s + ap_x - ap_a * ap_y
+                        ap_x, ap_y = s, far
+                    end
+                    local di = fi + int_delay
+                    if far_is_left then
+                        right[fi] = right[fi] + s * rg
+                        if di < n then left[di] = left[di] + far * lg end
+                    else
+                        left[fi] = left[fi] + s * lg
+                        if di < n then right[di] = right[di] + far * rg end
+                    end
+                else
+                    left[fi] = left[fi] + s * lg
+                    right[fi] = right[fi] + s * rg
+                end
+            end
+        end
+        -- Flush the allpass ringout into the far channel's tail.
+        if ap_a then
+            for k = 0, ALLPASS_FLUSH - 1 do
+                local fi = first + p.frames + k + int_delay
+                if fi >= n then break end
+                local far = ap_a * 0 + ap_x - ap_a * ap_y
+                ap_x, ap_y = 0, far
+                if far_is_left then left[fi] = left[fi] + far * lg
+                else right[fi] = right[fi] + far * rg end
+            end
+        end
+    end
+
+    local data = love.sound.newSoundData(n, RATE, 16, 2)
+    for i = 0, n - 1 do
+        data:setSample(i, 1, math.max(-1, math.min(1, left[i])))
+        data:setSample(i, 2, math.max(-1, math.min(1, right[i])))
+    end
+    return data
+end
+
+local function play_data(data)
+    if not data then return end
+    local src = love.audio.newSource(data, "static")
+    src:play()
+    S.sources[#S.sources + 1] = src
+end
+
+-- ====================== Event API (simple cues) =============================
+-- events: { {kind="tone"|"noise", freq, dur, at, pan, vol, q} ... } — tones
+-- for the cursor/step cues, noise rendered through a throwaway slice.
+
+local function event_placement(e)
+    local dur = e.dur or 0.05
+    local frames = math.floor(dur * RATE)
+    local grain
+    if e.kind == "noise" then
+        local slice = pool_take(pool_get("adhoc" .. tostring(e.freq), e.freq or WALL.base_hz), dur)
+        grain = function(i)
+            local v = slice.data[slice.offset + i] or 0
+            -- Simple attack/decay for ad-hoc noise (wall pings use ADSR).
+            local t = i / frames
+            return v * (i < 176 and i / 176 or (1 - t) * (1 - t)) / WALL.target_rms * 0.5
+        end
+    else
+        local step = 2 * math.pi * (e.freq or 440) / RATE
+        local attack = math.floor(0.004 * RATE)
+        grain = function(i)
+            local env = i < attack and i / attack or (1 - i / frames) * (1 - i / frames)
+            return math.sin(i * step) * env
+        end
+    end
+    return { grain = grain, frames = frames, start = e.at or 0,
+        pan = e.pan or 0, gain = e.vol or 0.5 }
+end
+
+function M.render(events)
+    if not events or #events == 0 then return nil end
+    local placements = {}
+    for _, e in ipairs(events) do placements[#placements + 1] = event_placement(e) end
+    local ok, data = pcall(render_placements, placements)
+    if not ok then
+        require("ma_speech").log("synth render error: " .. tostring(data))
+        return nil
+    end
+    return data
+end
+
+function M.play(events)
+    local data = M.render(events)
+    local ok, err = pcall(play_data, data)
+    if not ok then require("ma_speech").log("synth play error: " .. tostring(err)) end
+end
+
+-- ========================= Wall echo (the port) =============================
+-- distances: { left = tiles or nil, right = , up = , down = }.
+
+local function wall_placement(dist, pool, pan, loudness)
+    local slice = pool_take(pool, WALL.tone_seconds)
+    local gain = WALL.initial_volume
+        * math.pow(10, WALL.db_per_tile * math.max(0, dist - 1) / 20) * loudness
+    local start = math.max(0, dist - 1) * WALL.ms_per_tile / 1000
+    return {
+        grain = function(i)
+            local v = slice.data[slice.offset + i] or 0
+            return v * adsr(i / RATE, WALL.attack, WALL.decay, WALL.sustain,
+                WALL.release, WALL.sustain_level)
+        end,
+        frames = slice.count, start = start, pan = pan, gain = gain,
+    }
+end
+
+function M.play_walls(d)
+    local ok, err = pcall(function()
+        local placements = {}
+        local base = pool_get("base", WALL.base_hz)
+        if d.left then placements[#placements + 1] = wall_placement(d.left, base, -1, WALL.horizontal_gain) end
+        if d.right then placements[#placements + 1] = wall_placement(d.right, base, 1, WALL.horizontal_gain) end
+        if d.up then placements[#placements + 1] = wall_placement(d.up, pool_get("up", WALL.up_hz), 0, WALL.up_gain) end
+        if d.down then placements[#placements + 1] = wall_placement(d.down, pool_get("down", WALL.down_hz), 0, WALL.down_gain) end
+        if #placements == 0 then return end
+        play_data(render_placements(placements))
+    end)
+    if not ok then require("ma_speech").log("wall echo error: " .. tostring(err)) end
+end
+
+-- ============================ Housekeeping ==================================
+
 function M.prune()
     for i = #S.sources, 1, -1 do
         local src = S.sources[i]
@@ -23,40 +309,11 @@ function M.prune()
     end
 end
 
--- One RBJ biquad bandpass (constant skirt gain), processing a single sample.
-local function bandpass_new(freq, q)
-    local w0 = 2 * math.pi * freq / RATE
-    local alpha = math.sin(w0) / (2 * q)
-    local b0, b1, b2 = alpha, 0, -alpha
-    local a0, a1, a2 = 1 + alpha, -2 * math.cos(w0), 1 - alpha
-    local x1, x2, y1, y2 = 0, 0, 0, 0
-    return function(x)
-        local y = (b0 / a0) * x + (b1 / a0) * x1 + (b2 / a0) * x2
-            - (a1 / a0) * y1 - (a2 / a0) * y2
-        x2, x1 = x1, x
-        y2, y1 = y1, y
-        return y
-    end
-end
-
--- Envelope: linear attack, exponential-ish decay to the end of the grain.
-local function envelope(i, n, attack_samples)
-    if i < attack_samples then return i / attack_samples end
-    local t = (i - attack_samples) / math.max(1, n - attack_samples)
-    return (1 - t) * (1 - t)
-end
-
--- events: { {kind="tone"|"noise", freq=hz, dur=seconds, at=seconds, pan=-1..1,
---            vol=0..1, q=bandpass Q (noise only)} ... }
--- Renders everything into ONE stereo SoundData and plays it (a shared buffer
--- keeps multi-ping cues phase-coherent, per Tanglebeep's combat radar).
-
--- Dev introspection: per-channel energy of a render, to verify panning
--- reaches the samples (curl /eval require('ma_synth').channel_energy{...}).
+-- Dev introspection: per-channel energy of a render (pan verification).
 function M.channel_energy(events)
-    local l, r = 0, 0
     local data = M.render(events)
     if not data then return "render failed" end
+    local l, r = 0, 0
     for i = 0, data:getSampleCount() - 1 do
         l = l + math.abs(data:getSample(i, 1))
         r = r + math.abs(data:getSample(i, 2))
@@ -64,101 +321,10 @@ function M.channel_energy(events)
     return string.format("left=%.1f right=%.1f", l, r)
 end
 
-function M.play(events)
-    if not events or #events == 0 then return end
-    local ok, err = pcall(function()
-        local data = M.render(events)
-        if not data then return end
-        local src = love.audio.newSource(data, "static")
-        src:play()
-        S.sources[#S.sources + 1] = src
-    end)
-    if not ok then require("ma_speech").log("synth error: " .. tostring(err)) end
-end
+-- ======================= Named cues (unchanged API) =========================
 
-function M.render(events)
-    if not events or #events == 0 then return nil end
-    local ok, result = pcall(function()
-        local total = 0
-        for _, e in ipairs(events) do
-            total = math.max(total, (e.at or 0) + (e.dur or 0.05))
-        end
-        local n = math.ceil((total + MAX_ITD) * RATE) + 8
-        local left = {}
-        local right = {}
-        for i = 0, n - 1 do left[i] = 0; right[i] = 0 end
-
-        for _, e in ipairs(events) do
-            local dur = e.dur or 0.05
-            local grain_n = math.floor(dur * RATE)
-            local start = math.floor((e.at or 0) * RATE)
-            local pan = math.max(-1, math.min(1, e.pan or 0))
-            local vol = e.vol or 0.5
-            -- Constant-power pan law.
-            local theta = (pan + 1) * math.pi / 4
-            local lg, rg = math.cos(theta) * vol, math.sin(theta) * vol
-            -- Far ear lags by |pan| * MAX_ITD.
-            local itd = math.floor(math.abs(pan) * MAX_ITD * RATE)
-            local ldelay = pan > 0 and itd or 0
-            local rdelay = pan < 0 and itd or 0
-
-            -- Pre-generate the grain, then NORMALIZE its peak before the
-            -- envelope. Critical for narrow bandpass noise: at Q=30 the
-            -- filter passes a ~9 Hz sliver of the white noise's energy and
-            -- the raw ping comes out ~25 dB under everything else (the
-            -- Tanglebeep noise pool was RMS-normalized for exactly this).
-            local grain = {}
-            local peak = 0
-            if e.kind == "noise" then
-                local bp = bandpass_new(e.freq or 261.63, e.q or 30)
-                -- Deterministic LCG so cue timbre is stable run to run.
-                local seed = math.floor((e.freq or 261) * 7919) % 2147483647
-                for i = 0, grain_n - 1 do
-                    seed = (seed * 48271) % 2147483647
-                    local s = bp((seed / 2147483647) * 2 - 1)
-                    grain[i] = s
-                    local a = math.abs(s)
-                    if a > peak then peak = a end
-                end
-            else
-                local phase, step = 0, 2 * math.pi * (e.freq or 440) / RATE
-                for i = 0, grain_n - 1 do
-                    phase = phase + step
-                    grain[i] = math.sin(phase)
-                end
-                peak = 1
-            end
-            local norm = peak > 0 and (1 / peak) or 1
-
-            local attack = math.floor(0.004 * RATE)
-            for i = 0, grain_n - 1 do
-                local s = grain[i] * norm * envelope(i, grain_n, attack)
-                local li = start + i + ldelay
-                local ri = start + i + rdelay
-                if li < n then left[li] = left[li] + s * lg end
-                if ri < n then right[ri] = right[ri] + s * rg end
-            end
-        end
-
-        local data = love.sound.newSoundData(n, RATE, 16, 2)
-        for i = 0, n - 1 do
-            local l = math.max(-1, math.min(1, left[i]))
-            local r = math.max(-1, math.min(1, right[i]))
-            data:setSample(i, 1, l)
-            data:setSample(i, 2, r)
-        end
-        return data
-    end)
-    if not ok then
-        require("ma_speech").log("synth render error: " .. tostring(result))
-        return nil
-    end
-    return result
-end
-
--- Terrain-differentiated footstep cue: what the game designed and abandoned
--- (its puddle pitch-shift is commented out at actor.lua:6281). Family by
--- terrain root; quiet, short, distinct.
+-- Terrain-differentiated footstep cue (the game designed then abandoned
+-- terrain steps; its puddle pitch-shift is commented out at actor.lua:6281).
 local STEP_FAMILIES = {
     wood = { kind = "tone", freq = 170, dur = 0.035, vol = 0.22 },
     soft = { kind = "noise", freq = 420, q = 2, dur = 0.045, vol = 0.3 },
@@ -184,7 +350,6 @@ function M.step_cue(root)
     M.play(events)
 end
 
--- Simple named cues.
 function M.cue(name)
     if name == "cursor_ground" then
         M.play({ { kind = "tone", freq = 880, dur = 0.03, vol = 0.25 } })
