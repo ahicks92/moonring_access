@@ -92,11 +92,6 @@ function M.claim(kb)
             push({ kind = "app", action = "cursor_to_target", mods = mods })
         end
         eat(kb, "tab")
-        -- Ctrl+backslash: tracked map location's relative distance.
-        if kb.justPressedDictionary["\\"] then
-            push({ kind = "app", action = "tracked_where", mods = mods })
-        end
-        eat(kb, "\\")
         -- Review buffers: Ctrl+arrows (arrows only — Ctrl+WASD left alone).
         -- Up/down step lines, left/right switch buffers. Eaten every tick so
         -- the game's auto-repeat never walks the player.
@@ -110,6 +105,15 @@ function M.claim(kb)
             end
             eat(kb, arrow)
         end
+    end
+
+    -- Alt+backslash: tracked map location's relative distance. Global, like
+    -- the Ctrl claims above. (Ctrl+backslash is 1Password's hotkey.)
+    if mods.alt then
+        if kb.justPressedDictionary["\\"] then
+            push({ kind = "app", action = "tracked_where", mods = mods })
+        end
+        eat(kb, "\\")
     end
 
     if dispatcher.engaged() then
@@ -247,6 +251,7 @@ function M.claim(kb)
             -- everywhere else (towns, dungeons, interiors).
             local wd = G_stateGame.currentWorldData
             if not blocked and kb.justPressedDictionary["\\"]
+                and not mods.ctrl and not mods.alt
                 and (G_stateGame.currentWorldName == gOverworldName
                     or (wd and wd.isZoom)) then
                 push({ kind = "app", action = "weather", mods = mods })

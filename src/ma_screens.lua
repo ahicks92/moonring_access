@@ -603,7 +603,7 @@ local gods = {
 
 -- -------------------------------------------------------------------- map --
 -- The map screen (M): known locations sorted by distance from the player's
--- overworld position. Enter on a location TRACKS it; Ctrl+backslash then
+-- overworld position. Enter on a location TRACKS it; Alt+backslash then
 -- reads the tracked location's relative distance from anywhere. Locations
 -- come from the same data the drawn map labels use (overworldEntryPoints
 -- gated on knownLocations/seenLocations), so we never name a place the
@@ -684,7 +684,7 @@ function M.set_tracked(loc)
     hooks.state.tracked = { key = loc.key, name = loc.name, x = loc.x, y = loc.y }
 end
 
--- Ctrl+backslash: where is the tracked location from here?
+-- Alt+backslash: where is the tracked location from here?
 function M.tracked_where()
     local speech = require("ma_speech")
     local t = hooks.state.tracked
