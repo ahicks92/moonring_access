@@ -177,7 +177,7 @@ function M.step(dir, skip)
 
     if not skip then
         if not try_step() then
-            speech.say("Cursor range limit.", true)
+            synth.cue("bonk")
             return
         end
         play_tile_cues(C.x, C.y)

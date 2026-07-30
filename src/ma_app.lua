@@ -315,6 +315,26 @@ function M.install()
         return r
     end)
 
+    -- Tab target cycling: the game plays a click but never names who you
+    -- landed on. Speak name + offset (or "No target") — this is how you know
+    -- who E will talk to or R will shoot.
+    hooks.wrap(G_stateGame, "focusOnNextTarget", function(orig, self)
+        local r = orig(self)
+        pcall(function()
+            local p = player()
+            local t = p and p.target
+            if not t then
+                speech.say("No target.", true)
+                return
+            end
+            local ok, name = pcall(t.getDisplayName, t)
+            local dx = t.position.x - p.position.x
+            local dy = t.position.y - p.position.y
+            speech.say((ok and name or "target") .. ", " .. text.offset(dx, dy) .. ".", true)
+        end)
+        return r
+    end)
+
     hooks.wrap(G_stateGame, "checkForTrapAtMapXYZeroIndexed", function(orig, self, x, y, guaranteed)
         local before
         pcall(function() before = self.map:getRootAtMapXYZeroIndexed(x, y) end)
