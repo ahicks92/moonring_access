@@ -103,15 +103,15 @@ function M.status()
     if a.currentTypedTag and a.currentTypedTag ~= "" then
         parts[#parts + 1] = "suggests " .. text.clean(a.currentTypedTag)
     end
-    local words = {}
-    for _, t in ipairs(a.floatingTags or {}) do
-        local w = text.clean(t.text or "")
-        if w ~= "" then words[#words + 1] = w end
+    -- The visual cloud shows ONE word at a time from the seen-but-unused
+    -- rotation; read the whole rotation instead (same state, not time-
+    -- smeared). Hidden words the speaker never voiced stay hidden — they
+    -- must be learned elsewhere and typed in full, same as for everyone.
+    local ok, words = pcall(a.getUnusedKeys, a)
+    if ok and type(words) == "table" and #words > 0 then
+        parts[#parts + 1] = "You could ask about: " .. table.concat(words, ", ")
     end
-    if #words > 0 then
-        parts[#parts + 1] = "cloud words: " .. table.concat(words, ", ")
-    end
-    if #parts == 0 then parts[1] = "Nothing typed, no cloud words visible." end
+    if #parts == 0 then parts[1] = "Nothing typed, and nothing unasked from this speaker." end
     speech.say(table.concat(parts, ". ") .. ".", true)
 end
 
