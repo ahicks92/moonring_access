@@ -778,7 +778,9 @@ local function block_label(ctx, grid, bx, by, pbx, pby)
         if s.unexplored then
             m:list_item("unexplored")
         elseif s.solid then
-            m:list_item("solid")
+            -- All remembered cells are wall: no way in is known yet (may be
+            -- a room whose door we haven't found, or genuine solid fill).
+            m:list_item("entrance unseen")
         else
             if s.frac < 0.15 then m:list_item("edge seen")
             elseif s.frac < 0.5 then m:list_item("partly explored") end
