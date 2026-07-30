@@ -147,6 +147,12 @@ local function describe(x, y, full)
     local exit_edge = map.area_exit_edge_at(x, y)
     if exit_edge then parts[#parts + 1] = "area exit " .. exit_edge end
 
+    -- Overworld icons (herbs, berries, kindling, prints, ripples) at the
+    -- cursor tile — arrowing the world map reads what the icons show.
+    for _, n in ipairs(map.overworld_icons_at(x, y)) do
+        parts[#parts + 1] = n
+    end
+
     -- Shape vocabulary (hallway/corner/dead end) only makes sense on a tile
     -- you could stand on. On a blocked tile the useful inverse is which way
     -- the wall continues.

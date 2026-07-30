@@ -206,6 +206,49 @@ function M.tile_things(x, y)
     return names, false
 end
 
+-- Overworld icon-family things AT a tile (gatherables via the game's own
+-- predicates; prey prints while the player is within the game's print
+-- range; the fish ripple). Used by the exploration cursor so arrowing the
+-- world map reads what the icons show.
+function M.overworld_icons_at(x, y)
+    local names = {}
+    if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return names end
+    local GATHER = {
+        { fn = "isHerbAtWorldXY", name = "herb" },
+        { fn = "isBerryAtWorldXY", name = "berries" },
+        { fn = "isKindlingAtWorldXY", name = "kindling" },
+        { fn = "isTearAtWorldXY", name = "something odd" },
+        { fn = "isWitchesHerbAtWorldXY", name = "strange plant" },
+    }
+    for _, g in ipairs(GATHER) do
+        if type(G_stateGame[g.fn]) == "function" then
+            local ok, hit = pcall(G_stateGame[g.fn], G_stateGame, x, y)
+            if ok and hit then names[#names + 1] = g.name end
+        end
+    end
+    pcall(function()
+        local p = M.player()
+        local range = (G_Globals and G_Globals.huntDetectionDistanceWolf) or 8
+        local function check(animal)
+            if animal and animal.position and animal.position.x == x and animal.position.y == y then
+                local d = math.max(math.abs(x - p.position.x), math.abs(y - p.position.y))
+                if d < range then names[#names + 1] = "hoofprints" end
+            end
+        end
+        check(playerStats.foodAnimal)
+        local alive = true
+        pcall(function() alive = not G_stateGame.speechArea:isPropertyNonZero("killed_sleathen") end)
+        if alive then check(playerStats.sleathen) end
+    end)
+    pcall(function()
+        if playerStats.isFishPresent and playerStats.fishPositionX == x
+            and playerStats.fishPositionY == y then
+            names[#names + 1] = "water ripples"
+        end
+    end)
+    return names
+end
+
 -- Is this tile a walkable boundary tile (part of some exit run)? Returns the
 -- edge name(s) or nil. Cheap point query for the cursor — no run merging.
 function M.area_exit_edge_at(x, y)
