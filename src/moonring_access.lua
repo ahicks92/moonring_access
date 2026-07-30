@@ -221,9 +221,22 @@ function M.boot()
             -- numbers). Separate from the log — without this it is silent.
             -- Other actors' rising text stays unvoiced for now.
             hooks.wrap(G_stateGame, "addRisingTextToActorWithID", function(orig, self, id, str, ...)
+                local col, offset, rise_rate, life, tag = ...
                 pcall(function()
                     local p = self.actorManager and self.actorManager.player
                     if not p or id ~= p.ID or type(str) ~= "string" then return end
+                    -- Tagged texts ("SlowCell"...) are the game's own no-spam
+                    -- channel: rising_text.add drops a tagged add while one
+                    -- with that tag is still alive on the actor (~1.1s). We
+                    -- check the same dictionary it does, so we speak exactly
+                    -- the adds that actually appear on screen — without this,
+                    -- standing on unbroken slow ground in quiet mode calls
+                    -- "Slow!" every 40Hz tick that game time passes.
+                    if tag then
+                        local rt = require("rising_text")
+                        local tags = rt.actorTagDictionary and rt.actorTagDictionary[id]
+                        if tags and tags[tag] then return end
+                    end
                     local clean = text.clean(str)
                     -- Noise: "Wait" fires on every wait keypress; "Z"
                     -- frames are the sleep animation.
