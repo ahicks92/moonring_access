@@ -753,48 +753,62 @@ local function block_label(ctx, grid, bx, by, pbx, pby)
     local blockmap = require("ma_blockmap")
     local synth = require("ma_synth")
     local s = blockmap.summarize(grid, bx, by)
-    ctx.message:fragment(block_position_text(bx, by, pbx, pby))
+    local is_you = pbx and bx == pbx and by == pby
+    local m = ctx.message
+    -- "You" is identity, not a coordinate — it leads. Relative offsets are
+    -- always LAST in an utterance (hard rule), so other blocks speak their
+    -- contents first.
+    if is_you then m:fragment("You") end
+
     if not s then
-        ctx.message:list_item("unknown")
-        return
-    end
-
-    local sides = s.sides
-    if sides.north or sides.east or sides.south or sides.west then
-        synth.shape_earcon({
-            north = sides.north ~= nil, east = sides.east ~= nil,
-            south = sides.south ~= nil, west = sides.west ~= nil,
-        })
-    elseif s.unexplored then
-        synth.cue("cursor_unexplored")
+        m:list_item("unknown")
     else
-        synth.cue("cursor_wall")
+        local sides = s.sides
+        if sides.north or sides.east or sides.south or sides.west then
+            synth.shape_earcon({
+                north = sides.north ~= nil, east = sides.east ~= nil,
+                south = sides.south ~= nil, west = sides.west ~= nil,
+            })
+        elseif s.unexplored then
+            synth.cue("cursor_unexplored")
+        else
+            synth.cue("cursor_wall")
+        end
+
+        if s.unexplored then
+            m:list_item("unexplored")
+        elseif s.solid then
+            m:list_item("solid")
+        else
+            if s.frac < 0.15 then m:list_item("edge seen")
+            elseif s.frac < 0.5 then m:list_item("partly explored") end
+            append_block_features(m, s)
+        end
     end
 
-    if s.unexplored then
-        ctx.message:list_item("unexplored")
-        return
-    end
-    if s.solid then
-        ctx.message:list_item("solid")
-        return
-    end
-    if s.frac < 0.15 then ctx.message:list_item("edge seen")
-    elseif s.frac < 0.5 then ctx.message:list_item("partly explored") end
-    append_block_features(ctx.message, s)
+    if not is_you then m:list_item(block_position_text(bx, by, pbx, pby)) end
 end
 
 local function block_details(grid, bx, by, pbx, pby)
     local blockmap = require("ma_blockmap")
     local s = blockmap.summarize(grid, bx, by)
-    local lines = { block_position_text(bx, by, pbx, pby) }
+    local is_you = pbx and bx == pbx and by == pby
+    -- Same order discipline as the label: "You" leads, offsets come last.
+    local lines = {}
+    if is_you then lines[1] = "You" end
+    local function finish()
+        if not is_you then
+            lines[#lines + 1] = block_position_text(bx, by, pbx, pby)
+        end
+        return lines
+    end
     if not s then
         lines[#lines + 1] = "No map data."
-        return lines
+        return finish()
     end
     if s.unexplored then
         lines[#lines + 1] = "Unexplored."
-        return lines
+        return finish()
     end
     lines[#lines + 1] = "Explored " .. pct(s.frac) .. " percent"
     for _, dir in ipairs({ "north", "east", "south", "west" }) do
@@ -820,7 +834,7 @@ local function block_details(grid, bx, by, pbx, pby)
     if s.water then lines[#lines + 1] = "water" end
     if s.lava then lines[#lines + 1] = "lava" end
     if s.void then lines[#lines + 1] = "void" end
-    return lines
+    return finish()
 end
 
 local function block_click(ctx, grid, bx, by)
@@ -909,9 +923,10 @@ local map_screen = {
             b:add_item(Id.structural("loc:" .. tostring(l.key)), {
                 label = function(ctx)
                     ctx.message:fragment(l.name)
-                    ctx.message:list_item(compass_offset(l.dx, l.dy))
                     ctx.message:list_item(l.status)
                     if tracked and tracked.key == l.key then ctx.message:list_item("tracked") end
+                    -- Offsets are always LAST in an utterance (hard rule).
+                    ctx.message:list_item(compass_offset(l.dx, l.dy))
                 end,
                 on_click = function(ctx)
                     M.set_tracked(l)
@@ -920,9 +935,6 @@ local map_screen = {
                 details = function()
                     local lines = { l.name }
                     if l.region then lines[#lines + 1] = "Region: " .. clean(l.region) end
-                    local where = MB.new():fragment(compass_offset(l.dx, l.dy))
-                    if l.dist > 0 then where:list_item(l.dist .. " overworld steps") end
-                    lines[#lines + 1] = where:build()
                     lines[#lines + 1] = l.status
                     pcall(function()
                         local vision = G_Globals.hengeToDescription[l.key]
@@ -930,6 +942,9 @@ local map_screen = {
                             lines[#lines + 1] = clean(vision)
                         end
                     end)
+                    local where = MB.new():fragment(compass_offset(l.dx, l.dy))
+                    if l.dist > 0 then where:list_item(l.dist .. " overworld steps") end
+                    lines[#lines + 1] = where:build()
                     return lines
                 end,
             })

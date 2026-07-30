@@ -240,8 +240,9 @@ function M.read()
     local px, py = player_pos()
     play_tile_cues(C.x, C.y)
     local m = MB.new()
-    if px then m:list_item(text.offset(C.x - px, C.y - py)) end
     describe(m, C.x, C.y, true)
+    -- Offsets are always LAST in an utterance (hard rule).
+    if px then m:list_item(text.offset(C.x - px, C.y - py)) end
     speech.say(m, true)
 end
 

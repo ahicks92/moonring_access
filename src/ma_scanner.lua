@@ -311,7 +311,8 @@ local function speak_entry(list, idx, with_cat)
     if x then where = text.offset(x - p.position.x, y - p.position.y) end
     local m = MB.new()
     if with_cat then m:fragment(CAT_NAMES[S.cat or "visible"] .. ":") end
-    m:list_item(f.name()):list_item(where):list_item(idx .. " of " .. #list)
+    -- Offsets are always LAST in an utterance (hard rule).
+    m:list_item(f.name()):list_item(idx .. " of " .. #list):list_item(where)
     speech.say(m, true)
 end
 

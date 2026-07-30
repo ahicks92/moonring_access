@@ -1,5 +1,12 @@
 # MoonringAccess — project rules
 
+## Speech ordering: offsets last (hard rule)
+
+Relative coordinates ("3 right, 2 up", "2 east, 1 south", "nearest ...")
+are ALWAYS the last item of an utterance or list entry. Identity leads
+("You", a creature or place name), content follows, position comes last:
+"silverwolf, 2 of 5, 3 right, 2 up" — never offset-first or offset-mid.
+
 ## Message building: MessageBuilder everywhere (important)
 
 Spoken messages are assembled with the MessageBuilder (`src/ma_mb.lua`), never
