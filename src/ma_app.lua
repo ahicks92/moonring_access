@@ -362,6 +362,23 @@ function M.status_tick()
         end
         st.band = v > 0 and band or 0
     end
+
+    -- Detection radius, sneaking only: the dashed aggro ring sighted
+    -- players watch (drawAggroRange draws it only while sneaking). Shrinks
+    -- against walls and in cover, grows next to light — announce every
+    -- change, plus the starting value when sneak turns on.
+    local sneaking = playerStats and playerStats.isSneaking
+    if sneaking then
+        local ok, r = pcall(function()
+            return G_stateGame:modifyRadiusByStealth(G_Globals.defaultPlayerDetectionRadius)
+        end)
+        if ok and r ~= W.detect_r then
+            W.detect_r = r
+            speech.say("Detection radius " .. r .. ".", false)
+        end
+    else
+        W.detect_r = nil
+    end
 end
 
 local function announce_modes()
