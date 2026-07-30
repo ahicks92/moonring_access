@@ -267,6 +267,23 @@ local ACTIONS = {
         local on = require("ma_echo").toggle()
         speech.say("Wall echo " .. (on and "on." or "off."), true)
     end,
+    talk_status = function() require("ma_talk").status() end,
+    character = function()
+        local ps = playerStats
+        if not ps then return end
+        local p = G_stateGame.actorManager.player
+        local parts = {
+            tostring(ps.name) .. ", level " .. tostring(ps.level),
+            "strength " .. ps.strength .. ", intellect " .. ps.intellect
+                .. ", finesse " .. ps.finesse .. ", perception " .. ps.perception
+                .. ", endurance " .. ps.endurance .. ", luck " .. ps.luck,
+        }
+        local ok, melee = pcall(p.getMeleeWeaponData, p)
+        if ok and melee and melee.name then parts[#parts + 1] = "wielding " .. melee.name end
+        local ok2, ranged = pcall(p.getRangedWeaponData, p)
+        if ok2 and ranged and ranged.name then parts[#parts + 1] = "ranged " .. ranged.name end
+        speech.say(table.concat(parts, ". ") .. ".", true)
+    end,
 }
 
 function M.dispatch(cmd)

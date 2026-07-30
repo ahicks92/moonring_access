@@ -213,8 +213,132 @@ local number_box = {
     end,
 }
 
+-- --------------------------------------------------------------- inventory --
+-- Our keygraph over the game's inventory panel. Reads sortedInventory; left/
+-- right commit moveCategory (sub-identity resets focus and re-announces the
+-- category); enter commits selectItemUnderCursor (equip/use per the game's
+-- own logic); space (read_info) speaks the full description.
+local inventory = {
+    id = "inventory",
+    handler = function(self)
+        local panel = G_stateGame and G_stateGame.inventoryPanel
+        return (panel and panel.isOpen) and "active" or "inactive"
+    end,
+    sub_identity = function(self)
+        local panel = G_stateGame and G_stateGame.inventoryPanel
+        if not panel then return nil end
+        return "cat" .. tostring(panel.categoryIndex) .. "#" .. tostring(#(panel.sortedInventory or {}))
+    end,
+    announce = function(self, ctx)
+        local panel = G_stateGame.inventoryPanel
+        local cat = (G_Globals.categoryTypes and G_Globals.categoryTypes[panel.categoryIndex]) or "items"
+        local n = #(panel.sortedInventory or {})
+        ctx.message:fragment("Inventory, " .. tostring(cat) .. ", " .. n
+            .. (n == 1 and " item." or " items.") .. " Left and right change category.")
+    end,
+    build = function(self, b)
+        local panel = G_stateGame and G_stateGame.inventoryPanel
+        if not panel or not panel.isOpen then return end
+        b:capture_input()
+        local inv = panel.sortedInventory or {}
+        local function category_adjust(ctx, sign)
+            panel:moveCategory(sign)
+            -- sub-identity change re-announces the new category next tick
+        end
+        if #inv == 0 then
+            b:add_item(Id.structural("empty"), {
+                label = function(ctx) ctx.message:fragment("Nothing in this category.") end,
+                on_horizontal_adjust = category_adjust,
+            })
+            return
+        end
+        for i, v in ipairs(inv) do
+            local idx, item = i, v
+            local function display_name()
+                local ok, name = pcall(G_stateGame.getInventoryObjectName, G_stateGame, item.ID)
+                return clean((ok and name) or item.name or item.objectType or "item")
+            end
+            b:start_row("item" .. i)
+            b:add_item(Id.referenced(item, "item:" .. tostring(item.ID)), {
+                label = function(ctx)
+                    ctx.message:fragment(display_name())
+                    if (item.count or 1) > 1 then ctx.message:fragment("x " .. item.count) end
+                    local ok, worn = pcall(panel.isObjectWornOrWielded, panel, item)
+                    if ok and worn then ctx.message:fragment("equipped") end
+                    ctx.message:fragment(idx .. " of " .. #inv)
+                end,
+                on_click = function(ctx)
+                    panel.cursorPosition = idx
+                    panel:selectItemUnderCursor()
+                end,
+                on_horizontal_adjust = category_adjust,
+                on_read_info = function(ctx)
+                    local ok, desc = pcall(G_stateGame.getModifiedObjectDescription, G_stateGame, item)
+                    ctx.message:fragment(ok and clean(desc) or "No description.")
+                end,
+            })
+            b:end_row()
+        end
+    end,
+}
+
+-- ---------------------------------------------------------------- top menu --
+-- The Escape bar: Character / Inventory / Gods / Notes / Map / Options. One
+-- row, left/right; commit mirrors processUICategoryKeys' dispatch
+-- (state_game.lua:4906-4941) through the game's own open functions.
+local top_menu = {
+    id = "top_menu",
+    handler = function(self)
+        return (G_stateGame and G_stateGame.isTopMenuOpen) and "active" or "inactive"
+    end,
+    announce = function(self, ctx)
+        ctx.message:fragment("Menu bar.")
+    end,
+    build = function(self, b)
+        if not G_stateGame or not G_stateGame.isTopMenuOpen then return end
+        b:capture_input()
+        local cats = G_stateGame.UICategories or {}
+        b:start_row("cats", nil, { wrap = true })
+        for i, cat in ipairs(cats) do
+            local idx, name = i, cat
+            b:add_item(Id.structural("cat:" .. name), {
+                label = function(ctx)
+                    ctx.message:fragment(name)
+                    ctx.message:fragment(idx .. " of " .. #cats)
+                end,
+                on_click = function(ctx)
+                    local game = G_stateGame
+                    game.UICategoryIndex = idx
+                    if name == "Inventory" and game.isAnimationBlocking then
+                        game:openAlertBox("You cannot look in your pack while you are attacking or being attacked.")
+                        return
+                    end
+                    game:toggleIsTopMenuOpen()
+                    if name == "Character" then
+                        game.showCharacterPanel = true
+                        G_playSound("page_open")
+                    elseif name == "Inventory" then
+                        game:setIsInventoryPanelOpen(not game.inventoryPanel.isOpen)
+                    elseif name == "Notes" then
+                        game:setIsNotePanelOpen(not game.notePanel.isOpen)
+                    elseif name == "Map" then
+                        if not game.isMapOpen then game:toggleMap(); G_playSound("page_open") end
+                    elseif name == "Gods" then
+                        game:setIsSkillTreeOpen(true)
+                    elseif name == "Options" then
+                        game:openOptionsScreen()
+                    end
+                end,
+            })
+        end
+        b:end_row()
+    end,
+}
+
 -- Bottom-to-top: the topmost open modal wins, mirroring getUIInput order.
 function M.register_all()
+    dispatcher.register(top_menu)
+    dispatcher.register(inventory)
     dispatcher.register(multi_choice)
     dispatcher.register(confirm)
     dispatcher.register(number_box)

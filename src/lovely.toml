@@ -140,3 +140,15 @@ position = "after"
 payload = "require('moonring_access').boot()"
 match_indent = true
 times = 1
+
+[[patches]]
+[patches.module]
+source = "ma_talk.lua"
+before = "main.lua"
+name = "ma_talk"
+
+[[patches]]
+[patches.module]
+source = "ma_target.lua"
+before = "main.lua"
+name = "ma_target"

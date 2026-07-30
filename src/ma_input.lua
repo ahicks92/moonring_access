@@ -95,6 +95,9 @@ function M.claim(kb)
                 break
             end
         end
+        if kb.justPressedDictionary["space"] then
+            push({ kind = "read_info", mods = mods })
+        end
         if extra["home"] then push({ kind = "move_to_edge", dir = "left", mods = mods }) end
         if extra["end"] then push({ kind = "move_to_edge", dir = "right", mods = mods }) end
 
@@ -104,6 +107,7 @@ function M.claim(kb)
             for _, k in ipairs(keys) do eat(kb, k) end
         end
         for _, k in ipairs(CONFIRM_KEYS) do eat(kb, k) end
+        eat(kb, "space")
     end
 
     -- Review buffers, any context: Ctrl+arrows (arrows only — Ctrl+WASD left
@@ -130,7 +134,7 @@ function M.claim(kb)
     if in_game then
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
-            t = "turns", q = "modes", e = "echo_toggle",
+            t = "turns", q = "modes", e = "echo_toggle", c = "character",
         }
         if mods.ctrl then
             for letter, action in pairs(CHORDS) do
@@ -161,7 +165,11 @@ function M.claim(kb)
             local ok, b = pcall(G_stateGame.isUIBlockingPlayerMovement, G_stateGame)
             if ok then blocked = b and true or false end
 
-            if not blocked and not mods.ctrl then
+            -- During the game's targeting modes the GAME owns the arrows
+            -- (they move the aim cursor; ma_target voices it).
+            local targeting = G_stateGame.isTargetingLocation or G_stateGame.isTargetingDirection
+
+            if not blocked and not targeting and not mods.ctrl then
                 -- Plain/Shift arrows: cursor step / skip. WASD stays player
                 -- movement; arrows are the mod's (redundant for walking).
                 for _, arrow in ipairs({ "up", "down", "left", "right" }) do
@@ -181,7 +189,12 @@ function M.claim(kb)
                         skip = mods.shift, mods = mods })
                 end
             end
-            if extra["kp5"] then push({ kind = "app", action = "cursor_read", mods = mods }) end
+            -- kp5: conversation status while talking, else cursor read.
+            if extra["kp5"] then
+                local talking = false
+                pcall(function() talking = require("ma_talk").in_conversation() end)
+                push({ kind = "app", action = talking and "talk_status" or "cursor_read", mods = mods })
+            end
             if extra["kp0"] then push({ kind = "app", action = "cursor_recenter", mods = mods }) end
 
             -- Scanner: PageUp/Down entries, Ctrl+PageUp/Down categories,

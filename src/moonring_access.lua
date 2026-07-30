@@ -31,6 +31,8 @@ local MODULES = {
     { name = "ma_cursor",      file = "Mods/MoonringAccess/ma_cursor.lua" },
     { name = "ma_echo",        file = "Mods/MoonringAccess/ma_echo.lua" },
     { name = "ma_scanner",     file = "Mods/MoonringAccess/ma_scanner.lua" },
+    { name = "ma_talk",        file = "Mods/MoonringAccess/ma_talk.lua" },
+    { name = "ma_target",      file = "Mods/MoonringAccess/ma_target.lua" },
     { name = "ma_app",         file = "Mods/MoonringAccess/ma_app.lua" },
     { name = "moonring_access", file = "Mods/MoonringAccess/moonring_access.lua" },
 }
@@ -109,10 +111,13 @@ function M.pump(dt)
     pcall(app.watch_tick)
 
     -- Spatial-tool housekeeping: cursor follow (per game turn), scanner
-    -- world-change invalidation, finished-Source pruning.
+    -- world-change invalidation, finished-Source pruning; conversation
+    -- autocomplete watcher; targeting voice-over.
     pcall(function() require("ma_cursor").follow_tick() end)
     pcall(function() require("ma_scanner").watch_tick() end)
     pcall(function() require("ma_synth").prune() end)
+    pcall(function() require("ma_talk").tick() end)
+    pcall(function() require("ma_target").tick() end)
 
     if st.pending_reload then
         st.pending_reload = false
@@ -189,6 +194,10 @@ function M.boot()
                 return orig(self, total_text, no_spam)
             end)
         end
+    end)
+
+    stage("conversation hooks", function()
+        if G_stateGame then require("ma_talk").install() end
     end)
 
     stage("mute", function()
