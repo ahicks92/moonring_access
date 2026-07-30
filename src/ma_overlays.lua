@@ -33,6 +33,18 @@ local function clean(text)
     return ma_text.clean(text)
 end
 
+-- Mirror a modal's text into the Game log review buffer exactly once per
+-- content (tutorials and alerts were spoken once and unrecoverable).
+local hooks = require("ma_hooks")
+local function log_once(slot, body, line)
+    local st = hooks.state
+    st.modal_logged = st.modal_logged or {}
+    if st.modal_logged[slot] ~= body then
+        st.modal_logged[slot] = body
+        require("ma_buffers").add("log", line)
+    end
+end
+
 -- ------------------------------------------------------------ multi-choice --
 -- Generic list menu: the title screen's main menu, in-game options, barkeep /
 -- guard / ritual menus. Slider/toggle rows come from specialChoiceDictionary.
@@ -176,13 +188,42 @@ local function announce_only(id, widget_name, describe)
 end
 
 local alert = announce_only("alert", "alertBox", function(box, ctx)
-    ctx.message:fragment(clean(box.bodyText))
+    local body = clean(box.bodyText)
+    log_once("alert", tostring(box.bodyText), body)
+    ctx.message:fragment(body)
 end)
 
-local tutorial = announce_only("tutorial", "tutorialBox", function(box, ctx)
-    ctx.message:fragment("Tutorial:")
-    ctx.message:fragment(clean(box.bodyText))
-end)
+-- Tutorials are a real modal: captured, re-readable with any direction key,
+-- dismissed with Enter (nextPage advances the game's own tutorial queue; a
+-- queued follow-up re-announces via sub_identity). Text is mirrored to the
+-- Game log buffer so a missed announcement is always recoverable.
+local tutorial = {
+    id = "tutorial",
+    handler = function(self)
+        local box = widget("tutorialBox")
+        return (box and box.isOpen) and "active" or "inactive"
+    end,
+    sub_identity = function(self)
+        local box = widget("tutorialBox")
+        return box and tostring(box.bodyText) or nil
+    end,
+    build = function(self, b)
+        local box = widget("tutorialBox")
+        if not box or not box.isOpen then return end
+        b:capture_input()
+        b:add_item(Id.structural("tutorial"), {
+            label = function(ctx)
+                local body = clean(box.bodyText)
+                log_once("tutorial", tostring(box.bodyText), "Tutorial: " .. body)
+                ctx.message:fragment("Tutorial: " .. body)
+                ctx.message:fragment("Enter to dismiss.")
+            end,
+            on_click = function(ctx)
+                box:nextPage()
+            end,
+        })
+    end,
+}
 
 local text_input = announce_only("text_input", "textInputBox", function(box, ctx)
     ctx.message:fragment(clean(box.bodyText))
