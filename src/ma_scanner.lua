@@ -30,8 +30,14 @@ local CAT_NAMES = {
 local DOOR_ROOTS = {
     doorClosed = true, doorOpen = true, doorLocked = true, doorMetal = true,
     doorBroken = true, gateClosed = true, gateOpen = true, gateLocked = true,
+    tileDoor = true, openDoor = true,
 }
-local STAIR_ROOTS = { stairsUp = true, stairsDown = true }
+-- Exits: stairs, hatches (floorDoor), and revealed trapdoors all go DOWN or
+-- OUT — they live together in "Stairs and exits".
+local STAIR_ROOTS = {
+    stairsUp = true, stairsDown = true, floorDoor = true,
+    trapdoorOpen = true, trapdoorClosed = true,
+}
 local LOOT_ROOTS = {
     chestClosed = true, crateClosed = true, barrelClosed = true, bookshelf = true,
 }

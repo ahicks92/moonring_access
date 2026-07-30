@@ -61,7 +61,9 @@ end
 local POI_ROOTS = {
     doorClosed = true, doorOpen = true, doorLocked = true, doorMetal = true,
     doorBroken = true, gateClosed = true, gateOpen = true, gateLocked = true,
-    stairsUp = true, stairsDown = true,
+    tileDoor = true, openDoor = true,
+    stairsUp = true, stairsDown = true, floorDoor = true,
+    trapdoorOpen = true, trapdoorClosed = true,
     chestClosed = true, crateClosed = true, barrelClosed = true, bookshelf = true,
     campfire = true, bed = true, throne = true, well = true,
 }
