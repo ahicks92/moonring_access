@@ -403,16 +403,28 @@ function M.width_cue_world(dir, wider)
     elseif dir == "east" then pan = 0.9
     elseif dir == "north" then mult = 2
     elseif dir == "south" then mult = 0.7; stretch = 1.8 end
-    if wider then
+
+    -- Contour DRAWS the line the space extends along: everywhere rise =
+    -- wider, except south, where widening falls away downward (and a wall
+    -- closing from the south rises toward you). Salience stays with the
+    -- event: narrowing is always the loud, urgent shape.
+    local rising = wider
+    if dir == "south" then rising = not wider end
+    local warn = not wider
+    local vol = warn and (dir == "south" and 0.45 or 0.38) or 0.28
+    local d1 = (warn and 0.04 or 0.035) * stretch
+    local d2 = (warn and 0.05 or 0.035) * stretch
+    local gap = (warn and 0.045 or 0.04) * stretch
+    local hi, lo = 780 * mult, (warn and 390 or 520) * mult
+    if rising then
         M.play({
-            { kind = "tone", freq = 520 * mult, dur = 0.035 * stretch, pan = pan, vol = 0.28 },
-            { kind = "tone", freq = 780 * mult, dur = 0.035 * stretch, at = 0.04 * stretch, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = lo, dur = d1, pan = pan, vol = vol },
+            { kind = "tone", freq = hi, dur = d2, at = gap, pan = pan, vol = vol },
         })
     else
-        local vol = dir == "south" and 0.45 or 0.38
         M.play({
-            { kind = "tone", freq = 780 * mult, dur = 0.04 * stretch, pan = pan, vol = vol },
-            { kind = "tone", freq = 390 * mult, dur = 0.05 * stretch, at = 0.045 * stretch, pan = pan, vol = vol },
+            { kind = "tone", freq = hi, dur = d1, pan = pan, vol = vol },
+            { kind = "tone", freq = lo, dur = d2, at = gap, pan = pan, vol = vol },
         })
     end
 end
