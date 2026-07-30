@@ -50,6 +50,47 @@ function M.root_name(root)
     return named or root
 end
 
+-- Display name of the overworld location whose entry tile is (x, y), when
+-- the player knows or has seen it — the exact gate the game's map screen
+-- labels use (seeLocation fires the moment the tile is visible and lit, so
+-- anything we can announce is already named for sighted players). nil when
+-- unknown or not a location tile.
+function M.location_name_at(x, y)
+    if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return nil end
+    local td = G_stateGame.triggerData
+    if not (td and td.overworldEntryPoints) then return nil end
+    for _, v in ipairs(td.overworldEntryPoints) do
+        if v.x == x and v.y == y then
+            local name = v.data or v.action
+            if name and name ~= "playerStart"
+                and ((playerStats.knownLocations and playerStats.knownLocations[name])
+                    or (playerStats.seenLocations and playerStats.seenLocations[name])) then
+                local display = nil
+                pcall(function()
+                    local wd = require("world_data").getWorldDataWithName(name)
+                    if wd and wd.displayName and wd.displayName ~= "" then display = wd.displayName end
+                end)
+                return display or tostring(name):gsub("_", " ")
+            end
+            return nil
+        end
+    end
+    return nil
+end
+
+-- Spoken name for the tile root at (x, y): a henge tile carries its
+-- location's display name ("Runacarr henge") once known or seen; everything
+-- else is the plain root name.
+function M.root_label(x, y, root)
+    root = root or M.root(x, y)
+    local base = M.root_name(root)
+    if root == "henge" then
+        local loc = M.location_name_at(x, y)
+        if loc then return loc .. " henge" end
+    end
+    return base
+end
+
 -- Unrevealed secret door at world x,y (cell NAME check; reveals rewrite the
 -- cell so revealed ones drop out naturally).
 function M.secret_door_at(x, y)

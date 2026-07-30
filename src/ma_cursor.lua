@@ -126,7 +126,7 @@ local function describe(m, x, y, full)
     if full or root ~= C.last_root or shape_key ~= C.last_pathkey then
         if merged then m:list_item(things[1])
         elseif shape_text then m:list_item(shape_text)
-        else m:list_item(map.root_name(root)) end
+        else m:list_item(map.root_label(x, y, root)) end
     end
     C.last_root = root
     C.last_pathkey = shape_key

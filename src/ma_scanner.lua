@@ -86,9 +86,9 @@ local function tile_feature(x, y, cat, label)
         key = "tile:" .. cat .. ":" .. x .. "," .. y,
         cat = cat,
         name = function()
-            -- Re-read the root live: an opened door / looted chest renames.
-            local root = map.root(x, y)
-            return map.root_name(root) or label
+            -- Re-read the root live: an opened door / looted chest renames,
+            -- and a henge names itself once the location is known.
+            return map.root_label(x, y) or label
         end,
         pos = function() return x, y end,
         visible = function() return map.visible(x, y) or false end,

@@ -144,7 +144,7 @@ local function announce_pois()
     each_gated_tile("visible", function(x, y, dx, dy, root)
         local things, merged = require("ma_map").tile_things(x, y)
         if not merged and root and POI_ROOTS[root] then
-            spot(text.dist(dx, dy), dx, dy, root_name(root))
+            spot(text.dist(dx, dy), dx, dy, require("ma_map").root_label(x, y, root))
         end
         for _, tn in ipairs(things) do
             spot(text.dist(dx, dy), dx, dy, tn)
@@ -559,7 +559,7 @@ local function discover_landmarks()
                     local key = x .. ":" .. y .. ":door"
                     if not seen[key] then
                         seen[key] = true
-                        spot(text.dist(dx, dy), dx, dy, root_name(root) or "door")
+                        spot(text.dist(dx, dy), dx, dy, ma_map.root_label(x, y, root) or "door")
                     end
                 end
                 for _, tn in ipairs(trigger_names_at(x, y)) do
@@ -711,7 +711,8 @@ function M.watch_tick()
             m:list_item(shape_text)
         end
     elseif root_changed then
-        local named = root and not BORING_ROOTS[root] and root_name(root) or nil
+        local named = root and not BORING_ROOTS[root]
+            and require("ma_map").root_label(x, y, root) or nil
         if named then m:list_item(named) end
     end
     W.path_key = shape_key
