@@ -73,6 +73,7 @@ local function triggers_at(x, y)
         if a == "read" then names[#names + 1] = "something readable"
         elseif a == "search" then names[#names + 1] = "searchable spot"
         elseif a == "warp" then names[#names + 1] = "passage"
+        elseif a == "object" then names[#names + 1] = map.object_name(t.data) or "item"
         elseif a and not SKIP[a] then names[#names + 1] = tostring(a) end
     end
     return names

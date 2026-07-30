@@ -186,6 +186,14 @@ local function build_snapshot()
                             if a == "container" or a == "locked_chest" then
                                 a = nil
                             end
+                            if a == "object" then
+                                -- Ground pickups (berries, dropped items):
+                                -- named from their object type, filed Loot.
+                                local f = trigger_feature(x, y, map.object_name(t.data) or "item")
+                                f.cat = "loot"
+                                feats[#feats + 1] = f
+                                a = nil
+                            end
                             if a == "read" then
                                 feats[#feats + 1] = trigger_feature(x, y, "something readable")
                             elseif a == "search" then

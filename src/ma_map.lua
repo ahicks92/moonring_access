@@ -136,6 +136,16 @@ local OBJECT_ROOTS = {
 }
 local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true, mon = true }
 
+-- Display name for an object TYPE string (trigger data fields, ground
+-- pickups). The visible pickup IS the object, so naming it is parity.
+function M.object_name(object_type)
+    if not object_type then return nil end
+    local od = G_stateGame and G_stateGame.objectData and G_stateGame.objectData[object_type]
+    local name = od and od.name
+    if name and name ~= "" and name ~= "NA" then return tostring(name) end
+    return tostring(object_type)
+end
+
 local function trigger_actions_at(x, y)
     local actions = {}
     if not (G_stateGame and G_stateGame.triggerData and G_stateGame.currentWorldName) then return actions end
@@ -143,7 +153,13 @@ local function trigger_actions_at(x, y)
         G_stateGame.triggerData, G_stateGame.currentWorldName, x, y)
     if ok and type(list) == "table" then
         for _, t in ipairs(list) do
-            if t and t.action then actions[#actions + 1] = tostring(t.action) end
+            if t and t.action then
+                actions[#actions + 1] = tostring(t.action)
+                -- "object" pickups carry their item type in data.
+                if tostring(t.action) == "object" then
+                    actions[#actions] = "object:" .. tostring(t.data)
+                end
+            end
         end
     end
     return actions
@@ -183,6 +199,8 @@ function M.tile_things(x, y)
         elseif a == "warp" then names[#names + 1] = "passage"
         elseif a == "container" then names[#names + 1] = "container"
         elseif a == "locked_chest" then names[#names + 1] = "locked container"
+        elseif a:sub(1, 7) == "object:" then
+            names[#names + 1] = M.object_name(a:sub(8))
         elseif not SKIP_ACTIONS[a] then names[#names + 1] = a end
     end
     return names, false
