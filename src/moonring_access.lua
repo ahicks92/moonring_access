@@ -211,6 +211,29 @@ function M.boot()
                 end)
                 return orig(self, total_text, no_spam)
             end)
+
+            -- Rising text on the PLAYER: the floaty feedback channel ("Herb
+            -- here!", "Quiet: ON", "Immune!", "Sails slack", damage/heal
+            -- numbers). Separate from the log — without this it is silent.
+            -- Other actors' rising text stays unvoiced for now.
+            hooks.wrap(G_stateGame, "addRisingTextToActorWithID", function(orig, self, id, str, ...)
+                pcall(function()
+                    local p = self.actorManager and self.actorManager.player
+                    if not p or id ~= p.ID or type(str) ~= "string" then return end
+                    local clean = text.clean(str)
+                    -- Noise: "Wait" fires on every wait keypress; "Z"
+                    -- frames are the sleep animation.
+                    if clean == "" or clean == "Wait" or clean:match("^[Zz%s]*$") then return end
+                    st.pending_say = st.pending_say or {}
+                    for _, queued in ipairs(st.pending_say) do
+                        if queued == clean then return end   -- same-frame log dup
+                    end
+                    dev.on_game_text(clean)
+                    buffers.add("log", clean)
+                    st.pending_say[#st.pending_say + 1] = clean
+                end)
+                return orig(self, id, str, ...)
+            end)
         end
     end)
 

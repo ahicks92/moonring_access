@@ -133,8 +133,6 @@ end
 -- nearest first.
 local function announce_pois()
     local found = {}
-    local on_overworld = G_stateGame
-        and tostring(G_stateGame.currentWorldName) == "Overworld"
     each_gated_tile("visible", function(x, y, dx, dy, root)
         local things, merged = require("ma_map").tile_things(x, y)
         if not merged and root and POI_ROOTS[root] then
@@ -144,13 +142,14 @@ local function announce_pois()
         for _, tn in ipairs(things) do
             found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
         end
-        -- Overworld gatherables: the herb/berry/kindling icons sighted
-        -- players see scattered on the world map.
-        if on_overworld then
-            for _, tn in ipairs(require("ma_map").gatherables_at(x, y)) do
-                found[#found + 1] = { d = text.dist(dx, dy),
-                    s = tn .. ", " .. text.offset(dx, dy) }
-            end
+    end)
+    -- Overworld gatherables at the game's own reveal range (adjacent
+    -- sparkles — sighted players get nothing wider either).
+    pcall(function()
+        local p = player()
+        for _, g in ipairs(require("ma_map").gatherable_reveals(p.position.x, p.position.y)) do
+            found[#found + 1] = { d = text.dist(g.dx, g.dy),
+                s = g.name .. ", " .. text.offset(g.dx, g.dy) }
         end
     end)
     pcall(function()
@@ -643,7 +642,7 @@ function M.watch_tick()
     local mdx, mdy = nil, nil
     if not first then mdx, mdy = x - W.px, y - W.py end
     W.px, W.py = x, y
-    if first then W.root = nil; return end   -- world entry; "Entering X" covers it
+    if first then W.root = nil; W.reveals = nil; return end   -- world entry; "Entering X" covers it
 
     local parts = {}
     local ok, root = pcall(p.getCurrentTileRoot, p)
@@ -669,6 +668,23 @@ function M.watch_tick()
     for _, tn in ipairs(trigger_names_at(x, y)) do
         parts[#parts + 1] = tn
     end
+    -- Overworld gatherable reveals: the game sparkles ADJACENT tiles each
+    -- step (the "here!" cases speak through the rising-text feed). Keyed by
+    -- tile so walking along a berry row announces each bush once, with the
+    -- direction sighted players get from the sparkle's position.
+    pcall(function()
+        local seen = {}
+        for _, g in ipairs(require("ma_map").gatherable_reveals(x, y)) do
+            if not (g.dx == 0 and g.dy == 0) then
+                local key = g.name .. ":" .. (x + g.dx) .. ":" .. (y + g.dy)
+                seen[key] = true
+                if not (W.reveals and W.reveals[key]) then
+                    parts[#parts + 1] = g.name .. ", " .. text.offset(g.dx, g.dy)
+                end
+            end
+        end
+        W.reveals = seen
+    end)
     if #parts > 0 then
         speech.say(table.concat(parts, ", ") .. ".", false)
     end

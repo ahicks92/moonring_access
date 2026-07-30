@@ -218,18 +218,43 @@ local GATHER = {
     { fn = "isWitchesHerbAtWorldXY", name = "strange plant" },
 }
 
--- Gatherable icons (herbs, berries, kindling...) at an Overworld tile, via
--- the game's own predicates. Empty list off the Overworld.
+-- Gatherables at an Overworld tile — but ONLY when the game would currently
+-- reveal them. Sighted players never see gatherables at range: the game
+-- sparkles them per step (performOverworldFeatureCheck) only when ADJACENT —
+-- herbs/berries/tears/strange plants in the 8 surrounding tiles, kindling
+-- only cardinally. Reporting any wider would be information sighted players
+-- don't have. Out of reveal range: empty.
 function M.gatherables_at(x, y)
     local names = {}
     if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return names end
+    local p = M.player()
+    if not p or not p.position then return names end
+    local adx = math.abs(x - p.position.x)
+    local ady = math.abs(y - p.position.y)
+    if math.max(adx, ady) > 1 then return names end
+    local cardinal = adx + ady <= 1   -- NSEW neighbor or underfoot
     for _, g in ipairs(GATHER) do
-        if type(G_stateGame[g.fn]) == "function" then
+        if (g.fn ~= "isKindlingAtWorldXY" or cardinal)
+            and type(G_stateGame[g.fn]) == "function" then
             local ok, hit = pcall(G_stateGame[g.fn], G_stateGame, x, y)
             if ok and hit then names[#names + 1] = g.name end
         end
     end
     return names
+end
+
+-- All currently-revealed gatherables around the player, as {name, dx, dy}.
+function M.gatherable_reveals(px, py)
+    local list = {}
+    if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return list end
+    for dy = -1, 1 do
+        for dx = -1, 1 do
+            for _, n in ipairs(M.gatherables_at(px + dx, py + dy)) do
+                list[#list + 1] = { name = n, dx = dx, dy = dy }
+            end
+        end
+    end
+    return list
 end
 
 function M.overworld_icons_at(x, y)
