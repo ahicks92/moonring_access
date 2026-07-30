@@ -335,8 +335,40 @@ local top_menu = {
     end,
 }
 
+-- -------------------------------------------------------------- title idle --
+-- The attract screen is pure art with no widget: without this, every key is
+-- silent until Enter happens to open the menu. One captured node announces
+-- the situation (delayed a beat so NVDA's window-focus chatter settles), any
+-- direction key re-reads it, Enter opens the menu via the game's own path.
+local title_idle = {
+    id = "title_idle",
+    handler = function(self)
+        local ok, cur = pcall(gamestate.current)
+        if not ok or cur ~= G_stateTitleScreen then return "inactive" end
+        local hooks = require("ma_hooks")
+        if (hooks.state.frame or 0) < 150 then return "inactive" end
+        local t = G_stateTitleScreen
+        for _, w in ipairs({ "multiChoiceBox", "textInputBox", "alertBox", "confirmBox" }) do
+            if t[w] and t[w].isOpen then return "inactive" end
+        end
+        return "active"
+    end,
+    build = function(self, b)
+        b:capture_input()
+        b:add_item(Id.structural("begin"), {
+            label = function(ctx)
+                ctx.message:fragment("Moonring title screen. Press Enter to begin.")
+            end,
+            on_click = function(ctx)
+                G_stateTitleScreen:openOptionsScreen()
+            end,
+        })
+    end,
+}
+
 -- Bottom-to-top: the topmost open modal wins, mirroring getUIInput order.
 function M.register_all()
+    dispatcher.register(title_idle)
     dispatcher.register(top_menu)
     dispatcher.register(inventory)
     dispatcher.register(multi_choice)
