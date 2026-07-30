@@ -54,16 +54,26 @@ local function current_key()
     return B.order[B.current]
 end
 
--- Switch buffer left/right; returns the announcement. Switching resets the
--- target buffer's cursor to latest — arriving somewhere always starts from
--- now, never from a stale parked position.
+-- Switch buffer left/right; returns the announcement. EMPTY BUFFERS ARE
+-- SKIPPED (the Blindfold rule): the ring only contains buffers with content,
+-- so "Ask about" simply doesn't exist outside conversations. Switching
+-- resets the target's cursor to latest — never a stale parked position.
 function M.switch(dir)
     local n = #B.order
-    B.current = ((B.current - 1 + (dir == "right" and 1 or -1)) % n) + 1
-    local key = current_key()
-    B.pos[key] = nil
-    local count = #B.lines[key]
-    return B.names[key] .. ", " .. count .. (count == 1 and " line" or " lines")
+    local step = dir == "right" and 1 or -1
+    local idx = B.current
+    for _ = 1, n do
+        idx = ((idx - 1 + step) % n) + 1
+        if #B.lines[B.order[idx]] > 0 then
+            B.current = idx
+            local key = current_key()
+            B.pos[key] = nil
+            local count = #B.lines[key]
+            return B.names[key] .. ", " .. count .. (count == 1 and " line" or " lines")
+        end
+    end
+    require("ma_synth").cue("bonk")
+    return "All buffers empty"
 end
 
 -- Step within the current buffer; "up" = older. Returns the line to speak,
