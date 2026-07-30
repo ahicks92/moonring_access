@@ -111,13 +111,23 @@ local function build_snapshot()
     local px, py = p.position.x, p.position.y
     local feats = {}
 
-    -- Actors.
+    -- Actors. Personhood is villageSim membership / person actorTypes /
+    -- player-faction allies — NOT faction: neutral wildlife (faction "none",
+    -- e.g. boars) is killable fauna, i.e. Monsters.
+    local PERSON_TYPES = {
+        guard = true, mercenary = true, priest = true, villager = true,
+        trader = true, trader_outside = true, villager_outside = true,
+    }
     local am = G_stateGame.actorManager
     for _, a in ipairs(am.actorArray or {}) do
         if a ~= p and not a.isDead and not a.isCorpse and a.position then
             local ok, vis = pcall(a.getIsVisibleToPlayer, a)
             if ok and vis then
-                feats[#feats + 1] = actor_feature(a, a.faction == "enemy" and "monsters" or "npcs")
+                local cat = "monsters"
+                if a.villageSim or PERSON_TYPES[a.actorType] or a.faction == "player" then
+                    cat = "npcs"
+                end
+                feats[#feats + 1] = actor_feature(a, cat)
             end
         end
     end

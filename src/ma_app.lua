@@ -34,7 +34,10 @@ local function announce_hostiles()
     if not p then return end
     local found = {}
     for _, a in ipairs(G_stateGame.actorManager.actorArray) do
-        if a ~= p and not a.isDead and not a.isCorpse and a.faction == "enemy" then
+        -- Hostile = enemy faction, OR anything currently targeting the
+        -- player (aggroed neutral wildlife never flips faction).
+        local hostile = a.faction == "enemy" or (a.target == p)
+        if a ~= p and not a.isDead and not a.isCorpse and hostile then
             local ok, vis = pcall(a.getIsVisibleToPlayer, a)
             if ok and vis then
                 local dx = a.position.x - p.position.x
