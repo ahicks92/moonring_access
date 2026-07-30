@@ -386,21 +386,30 @@ function M.play_wall_forward(dir, dist)
     if not ok then require("ma_speech").log("forward wall error: " .. tostring(err)) end
 end
 
--- Side-width change cue: a two-tone chirp panned to that side. Wider = up
--- (520 -> 780 Hz), gentle. Narrower = down with a WIDER drop and more level:
--- walls closing in is a warning, walls opening is an invitation, and the two
--- must not be mistakable for each other at speed. Plain first-pass sounds.
-function M.width_cue(side, wider)
-    local pan = side * 0.9
+-- Flank-width change cue, COMPASS-FIXED like everything else (pan means
+-- world east/west, never heading-relative): west/east flanks pan hard to
+-- their side at base register; north/south flanks are centered an octave
+-- up/down respectively (the wall-ping register convention). Contour carries
+-- the change: gentle rise = widened; louder, full-octave drop = narrowed
+-- (closing walls are a warning, not a symmetric event).
+function M.width_cue_world(dir, wider)
+    local pan, mult = 0, 1
+    if dir == "west" then pan = -0.9
+    elseif dir == "east" then pan = 0.9
+    elseif dir == "north" then mult = 2
+    elseif dir == "south" then mult = 0.5 end
     if wider then
         M.play({
-            { kind = "tone", freq = 520, dur = 0.035, pan = pan, vol = 0.28 },
-            { kind = "tone", freq = 780, dur = 0.035, at = 0.04, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = 520 * mult, dur = 0.035, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = 780 * mult, dur = 0.035, at = 0.04, pan = pan, vol = 0.28 },
         })
     else
+        -- South's drop bottoms at ~195 Hz, inside the low-end hole; keep its
+        -- level a touch higher still.
+        local vol = dir == "south" and 0.45 or 0.38
         M.play({
-            { kind = "tone", freq = 780, dur = 0.04, pan = pan, vol = 0.38 },
-            { kind = "tone", freq = 390, dur = 0.05, at = 0.045, pan = pan, vol = 0.38 },
+            { kind = "tone", freq = 780 * mult, dur = 0.04, pan = pan, vol = vol },
+            { kind = "tone", freq = 390 * mult, dur = 0.05, at = 0.045, pan = pan, vol = vol },
         })
     end
 end

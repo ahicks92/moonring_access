@@ -69,18 +69,24 @@ function M.on_move(dx, dy)
         synth.play_wall_forward(dir, d)
     end
 
-    -- Side widths, perpendicular to heading. left = heading rotated CCW in
-    -- screen coords: (dy, -dx); verified: moving west (-1,0) -> left (0,1) =
-    -- south. Open beyond range counts as MAX_DIST + 1 so "wall came into
-    -- range" and "wall left range" both register as changes.
-    local lw = wall_distance(px, py, dy, -dx) or (MAX_DIST + 1)
-    local rw = wall_distance(px, py, -dy, dx) or (MAX_DIST + 1)
+    -- Flank widths, perpendicular to heading — but SPOKEN in compass terms
+    -- (pan is reserved for world east/west; a north flank chirps centered-
+    -- high even when it happens to be on your left). Open beyond range
+    -- counts as MAX_DIST + 1 so walls entering/leaving range register.
+    local function world_dir(fdx, fdy)
+        if fdx < 0 then return "west" elseif fdx > 0 then return "east"
+        elseif fdy < 0 then return "north" else return "south" end
+    end
+    local adx, ady = dy, -dx      -- one flank (heading rotated CCW)
+    local bdx, bdy = -dy, dx      -- the other
+    local aw = wall_distance(px, py, adx, ady) or (MAX_DIST + 1)
+    local bw = wall_distance(px, py, bdx, bdy) or (MAX_DIST + 1)
     local heading = dx .. "," .. dy
     if E.prev and E.prev.heading == heading then
-        if lw ~= E.prev.lw then synth.width_cue(-1, lw > E.prev.lw) end
-        if rw ~= E.prev.rw then synth.width_cue(1, rw > E.prev.rw) end
+        if aw ~= E.prev.aw then synth.width_cue_world(world_dir(adx, ady), aw > E.prev.aw) end
+        if bw ~= E.prev.bw then synth.width_cue_world(world_dir(bdx, bdy), bw > E.prev.bw) end
     end
-    E.prev = { heading = heading, lw = lw, rw = rw }
+    E.prev = { heading = heading, aw = aw, bw = bw }
 end
 
 return M
