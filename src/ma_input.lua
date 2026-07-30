@@ -120,8 +120,11 @@ function M.claim(kb)
                 else
                     push({ kind = "app", action = "buffer_switch", dir = arrow, mods = mods })
                 end
-                eat(kb, arrow)
             end
+            -- Eat held state EVERY tick while Ctrl is down, not just on the
+            -- press edge — otherwise the game's 10-tick auto-repeat sees the
+            -- held arrow and walks the player.
+            eat(kb, arrow)
         end
     end
 
@@ -141,14 +144,14 @@ function M.claim(kb)
             for letter, action in pairs(CHORDS) do
                 if kb.justPressedDictionary[letter] then
                     push({ kind = "app", action = action, mods = mods })
-                    eat(kb, letter)
                 end
+                eat(kb, letter)   -- held state too (same auto-repeat leak)
             end
         elseif mods.alt then
             if kb.justPressedDictionary["h"] then
                 push({ kind = "app", action = "terrain", mods = mods })
-                eat(kb, "h")
             end
+            eat(kb, "h")
         elseif kb.justPressedDictionary["h"] and not dispatcher.engaged() then
             local blocked = false
             local ok, b = pcall(G_stateGame.isUIBlockingPlayerMovement, G_stateGame)
