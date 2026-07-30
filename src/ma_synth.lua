@@ -505,6 +505,10 @@ function M.cue(name)
         M.play({ { kind = "tone", freq = 110, dur = 0.04, vol = 0.2 } })
     elseif name == "scan_tick" then
         M.play({ { kind = "tone", freq = 660, dur = 0.02, vol = 0.2 } })
+    elseif name == "bonk" then
+        -- Edge-of-list thunk (review buffers, and anything else that runs
+        -- out of road).
+        M.play({ { kind = "tone", freq = 160, dur = 0.05, vol = 0.35 } })
     end
 end
 

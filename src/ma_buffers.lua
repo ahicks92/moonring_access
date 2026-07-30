@@ -47,7 +47,9 @@ function M.switch(dir)
     return B.names[key] .. ", " .. count .. (count == 1 and " line" or " lines")
 end
 
--- Step within the current buffer; "up" = older. Returns the line to speak.
+-- Step within the current buffer; "up" = older. Returns the line to speak,
+-- or nil after bonking at an edge — every spoken line is a REAL line, no
+-- synthetic "at latest"/"oldest" pseudo-entries.
 function M.step(dir)
     local key = current_key()
     local lines = B.lines[key]
@@ -57,17 +59,16 @@ function M.step(dir)
     if dir == "up" then
         pos = (pos or (#lines + 1)) - 1
         if pos < 1 then
-            pos = 1
-            B.pos[key] = pos
-            return "Oldest: " .. lines[pos]
+            require("ma_synth").cue("bonk")
+            B.pos[key] = 1
+            return nil
         end
     else
-        if pos == nil then return "At latest: " .. lines[#lines] end
-        pos = pos + 1
-        if pos >= #lines then
-            B.pos[key] = nil
-            return "At latest: " .. lines[#lines]
+        if pos == nil or pos >= #lines then
+            require("ma_synth").cue("bonk")
+            return nil
         end
+        pos = pos + 1
     end
     B.pos[key] = pos
     return lines[pos]
