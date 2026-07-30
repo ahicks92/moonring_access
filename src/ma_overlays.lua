@@ -323,6 +323,88 @@ local inventory = {
     end,
 }
 
+-- ------------------------------------------------------------------- notes --
+-- The game's journal: tag-grouped notes from conversations, books, spells,
+-- tutorials (note_panel.lua). Rows are the panel's sortedNotes; Enter/Space
+-- read the full assembled body (speaker-attributed); left/right change
+-- category through the panel's own moveCategory.
+local NOTE_CATEGORIES = { "Recency", "Lore", "Tutorials", "Books", "Spells", "Favourites" }
+
+local function note_label(note)
+    if note.tag then return clean(note.tag) end
+    local t = clean(note.text or "note")
+    if #t > 60 then t = t:sub(1, 57) .. "..." end
+    return t
+end
+
+local function note_body(panel, note)
+    if not note then return "" end
+    if note.tag then
+        local arr = panel.noteDictionaryOfArraysWithTag[note.tag] or {}
+        local parts = {}
+        for _, v in ipairs(arr) do
+            parts[#parts + 1] = (v.speaker and (clean(v.speaker) .. ": ") or "") .. clean(v.text)
+        end
+        return table.concat(parts, " ")
+    end
+    return clean(note.text or "")
+end
+
+local notes = {
+    id = "notes",
+    handler = function(self)
+        local panel = G_stateGame and G_stateGame.notePanel
+        return (panel and panel.isOpen) and "active" or "inactive"
+    end,
+    sub_identity = function(self)
+        local panel = G_stateGame and G_stateGame.notePanel
+        if not panel then return nil end
+        return "cat" .. tostring(panel.categoryIndex) .. "#" .. tostring(#(panel.sortedNotes or {}))
+    end,
+    announce = function(self, ctx)
+        local panel = G_stateGame.notePanel
+        local cat = NOTE_CATEGORIES[panel.categoryIndex] or "notes"
+        local n = #(panel.sortedNotes or {})
+        ctx.message:fragment("Notes, " .. cat .. ", " .. n
+            .. (n == 1 and " entry." or " entries.")
+            .. " Enter reads a note, left and right change category.")
+    end,
+    build = function(self, b)
+        local panel = G_stateGame and G_stateGame.notePanel
+        if not panel or not panel.isOpen then return end
+        b:capture_input()
+        local list = panel.sortedNotes or {}
+        local function category_adjust(ctx, sign)
+            panel:moveCategory(sign)
+        end
+        if #list == 0 then
+            b:add_item(Id.structural("empty"), {
+                label = function(ctx) ctx.message:fragment("No notes in this category.") end,
+                on_horizontal_adjust = category_adjust,
+            })
+            return
+        end
+        for i, note in ipairs(list) do
+            local idx, n = i, note
+            local read_body = function(ctx)
+                panel.cursorPosition = idx   -- visual parity, write-only
+                ctx.message:fragment(note_body(panel, n))
+            end
+            b:start_row("note" .. i)
+            b:add_item(Id.structural("note:" .. tostring(n.tag or i)), {
+                label = function(ctx)
+                    ctx.message:fragment(note_label(n))
+                    ctx.message:fragment(idx .. " of " .. #list)
+                end,
+                on_click = read_body,
+                on_read_info = read_body,
+                on_horizontal_adjust = category_adjust,
+            })
+            b:end_row()
+        end
+    end,
+}
+
 -- ---------------------------------------------------------------- top menu --
 -- The Escape bar: Character / Inventory / Gods / Notes / Map / Options. One
 -- row, left/right; commit mirrors processUICategoryKeys' dispatch
@@ -468,6 +550,7 @@ local tuning = {
 function M.register_all()
     dispatcher.register(title_idle)
     dispatcher.register(top_menu)
+    dispatcher.register(notes)
     dispatcher.register(inventory)
     dispatcher.register(multi_choice)
     dispatcher.register(confirm)
