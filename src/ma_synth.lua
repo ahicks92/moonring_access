@@ -393,23 +393,26 @@ end
 -- the change: gentle rise = widened; louder, full-octave drop = narrowed
 -- (closing walls are a warning, not a symmetric event).
 function M.width_cue_world(dir, wider)
-    local pan, mult = 0, 1
+    -- South's identity is "low and UNHURRIED", not "an octave down": at x0.5
+    -- its narrowing chirp bottomed at 195 Hz for 50 ms — under ten cycles,
+    -- which reads as a click, not a pitch (the low-end breakdown Austin
+    -- heard). x0.7 with ~1.8x durations keeps every note above ~270 Hz and
+    -- gives the ear enough cycles; north stays high and quick.
+    local pan, mult, stretch = 0, 1, 1
     if dir == "west" then pan = -0.9
     elseif dir == "east" then pan = 0.9
     elseif dir == "north" then mult = 2
-    elseif dir == "south" then mult = 0.5 end
+    elseif dir == "south" then mult = 0.7; stretch = 1.8 end
     if wider then
         M.play({
-            { kind = "tone", freq = 520 * mult, dur = 0.035, pan = pan, vol = 0.28 },
-            { kind = "tone", freq = 780 * mult, dur = 0.035, at = 0.04, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = 520 * mult, dur = 0.035 * stretch, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = 780 * mult, dur = 0.035 * stretch, at = 0.04 * stretch, pan = pan, vol = 0.28 },
         })
     else
-        -- South's drop bottoms at ~195 Hz, inside the low-end hole; keep its
-        -- level a touch higher still.
         local vol = dir == "south" and 0.45 or 0.38
         M.play({
-            { kind = "tone", freq = 780 * mult, dur = 0.04, pan = pan, vol = vol },
-            { kind = "tone", freq = 390 * mult, dur = 0.05, at = 0.045, pan = pan, vol = vol },
+            { kind = "tone", freq = 780 * mult, dur = 0.04 * stretch, pan = pan, vol = vol },
+            { kind = "tone", freq = 390 * mult, dur = 0.05 * stretch, at = 0.045 * stretch, pan = pan, vol = vol },
         })
     end
 end
