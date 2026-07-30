@@ -811,9 +811,12 @@ local function announce_weather()
             or ("No amber fog within " .. AMBER_SCAN)
     end
 
+    -- windDirection names the SOURCE (maritime convention): sailing while
+    -- facing it is "into the wind" (slack sails), fog and rain drift the
+    -- opposite way. Sighted players learn this from the particle drift.
     local w = G_stateGame.weather
     if w and w.windDirection then
-        parts[#parts + 1] = "Wind " .. (WIND_NAMES[w.windDirection] or "unknown")
+        parts[#parts + 1] = "Wind from the " .. (WIND_NAMES[w.windDirection] or "unknown")
     end
 
     local rain = 0

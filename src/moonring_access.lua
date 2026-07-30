@@ -197,6 +197,9 @@ function M.boot()
                     if type(total_text) == "string" then
                         for line in tostring(total_text):gmatch("[^\n]+") do
                             local clean = text.clean(line)
+                            -- "Wind: North" names the SOURCE; sighted players
+                            -- learn that from particle drift, so say it.
+                            clean = clean:gsub("^Wind: (%a+)$", "Wind from the %1")
                             if clean ~= "" then
                                 dev.on_game_text(clean)
                                 buffers.add("log", clean)
