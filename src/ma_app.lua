@@ -243,6 +243,70 @@ local function announce_modes()
         .. ", quiet " .. (sneak and "on" or "off") .. ".", true)
 end
 
+-- ------------------------------------------------------- LOS discovery -----
+-- Sighted players get landmarks pushed into awareness the moment they round
+-- a corner. Each step, navigation landmarks (doors, stairs, hatches,
+-- passages/entrances) that just ENTERED line of sight announce themselves
+-- with an offset — once per level per landmark, non-interrupting.
+
+local LANDMARK_ROOTS = {
+    doorClosed = true, doorOpen = true, doorLocked = true, doorMetal = true,
+    doorBroken = true, gateClosed = true, gateOpen = true, gateLocked = true,
+    tileDoor = true, openDoor = true,
+    stairsUp = true, stairsDown = true, floorDoor = true,
+    trapdoorOpen = true, trapdoorClosed = true,
+}
+
+local LOS_RADIUS = 11   -- >= max view distance (9 + high ground); visible() gates
+
+local function discover_landmarks()
+    local ma_map = require("ma_map")
+    local p = player()
+    if not p then return end
+    local world = tostring(G_stateGame.currentWorldName or "?")
+    W.seen_landmarks = W.seen_landmarks or {}
+    local seen = W.seen_landmarks[world]
+    if not seen then seen = {}; W.seen_landmarks[world] = seen end
+
+    local found = {}
+    local px, py = p.position.x, p.position.y
+    for dy = -LOS_RADIUS, LOS_RADIUS do
+        for dx = -LOS_RADIUS, LOS_RADIUS do
+            local x, y = px + dx, py + dy
+            if ma_map.visible(x, y) then
+                local root = ma_map.root(x, y)
+                if root and LANDMARK_ROOTS[root] then
+                    local key = x .. ":" .. y .. ":door"
+                    if not seen[key] then
+                        seen[key] = true
+                        found[#found + 1] = { d = text.dist(dx, dy),
+                            s = (root_name(root) or "door") .. ", " .. text.offset(dx, dy) }
+                    end
+                end
+                for _, tn in ipairs(trigger_names_at(x, y)) do
+                    -- Entrances/passages only; signs and searchables stay
+                    -- scanner territory (too common for push announcements).
+                    if tn ~= "something readable" and tn ~= "searchable spot" then
+                        local key = x .. ":" .. y .. ":" .. tn
+                        if not seen[key] then
+                            seen[key] = true
+                            found[#found + 1] = { d = text.dist(dx, dy),
+                                s = tn .. ", " .. text.offset(dx, dy) }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    if #found > 0 then
+        table.sort(found, function(a, b) return a.d < b.d end)
+        local parts = {}
+        for i = 1, math.min(#found, 5) do parts[#parts + 1] = found[i].s end
+        if #found > 5 then parts[#parts + 1] = "and " .. (#found - 5) .. " more" end
+        speech.say("Spotted: " .. table.concat(parts, "; ") .. ".", false)
+    end
+end
+
 -- ------------------------------------------------------------ turn watcher --
 
 -- Called every pump frame; announces tile changes as the player moves.
@@ -276,11 +340,13 @@ function M.watch_tick()
 
     -- The wall echo fires on every real move (the primary spatial channel),
     -- preceded by a terrain-differentiated step cue. The movement delta gives
-    -- the echo its heading (forward ping + side-width monitors).
+    -- the echo its heading (forward ping + side-width monitors). Then the
+    -- LOS discovery pass announces landmarks that just came into view.
     if W.steps_enabled ~= false then
         pcall(function() require("ma_synth").step_cue(root) end)
     end
     pcall(function() require("ma_echo").on_move(mdx, mdy) end)
+    pcall(discover_landmarks)
 end
 
 -- --------------------------------------------------------- reveal watchers --
