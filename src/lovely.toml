@@ -83,6 +83,12 @@ name = "ma_scanner"
 
 [[patches]]
 [patches.module]
+source = "ma_blockmap.lua"
+before = "main.lua"
+name = "ma_blockmap"
+
+[[patches]]
+[patches.module]
 source = "ma_id.lua"
 before = "main.lua"
 name = "ma_id"

@@ -23,6 +23,15 @@ function M.to_map(x, y)
     return mx, my
 end
 
+-- 0-indexed map-window coords -> world, or nil when unavailable.
+function M.from_map(mx, my)
+    local map = M.game_map()
+    if not map then return nil end
+    local ok, x, y = pcall(map.convertMapXYToWorldXY, map, mx, my)
+    if not ok or type(x) ~= "number" then return nil end
+    return x, y
+end
+
 local function map_bool(method, x, y)
     local map = M.game_map()
     local mx, my = M.to_map(x, y)
@@ -193,7 +202,12 @@ local OBJECT_ROOTS = {
     barrelClosed = true, barrelOpen = true,
     bookshelf = true, bookshelfSearched = true, bookshelfEmpty = true,
 }
-local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true, mon = true }
+-- fn* are cell-function triggers: the root already announces the thing
+-- (stairs, teleporter, altar) — and fnTrap is a HIDDEN trap, which sighted
+-- players cannot see (the trap-spotted watcher announces reveals).
+local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true, mon = true,
+    fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
+    fnYellDouseAltar = true }
 
 -- Display name for an object TYPE string (trigger data fields, ground
 -- pickups). The visible pickup IS the object, so naming it is parity.

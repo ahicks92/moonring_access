@@ -113,7 +113,9 @@ local function trigger_names_at(x, y)
         G_stateGame.triggerData, G_stateGame.currentWorldName, x, y)
     if not ok or type(list) ~= "table" then return names end
     -- Non-informative internal trigger actions a player never interacts with.
-    local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true }
+    local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true,
+        fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
+        fnYellDouseAltar = true }
     for _, t in ipairs(list) do
         local action = t and t.action
         if action == "read" then

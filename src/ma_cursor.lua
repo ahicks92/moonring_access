@@ -71,7 +71,9 @@ local function triggers_at(x, y)
     local ok, list = pcall(G_stateGame.triggerData.getAllTriggersOnLevelAtXYZeroIndexed,
         G_stateGame.triggerData, G_stateGame.currentWorldName, x, y)
     if not ok or type(list) ~= "table" then return names end
-    local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true }
+    local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true,
+        fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
+        fnYellDouseAltar = true }
     for _, t in ipairs(list) do
         local a = t and t.action
         if a == "read" then names[#names + 1] = "something readable"

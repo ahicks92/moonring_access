@@ -27,6 +27,7 @@ local MODULES = {
     { name = "ma_screens",     file = "Mods/MoonringAccess/ma_screens.lua" },
     { name = "ma_overlays",    file = "Mods/MoonringAccess/ma_overlays.lua" },
     { name = "ma_map",         file = "Mods/MoonringAccess/ma_map.lua" },
+    { name = "ma_blockmap",    file = "Mods/MoonringAccess/ma_blockmap.lua" },
     { name = "ma_items",       file = "Mods/MoonringAccess/ma_items.lua" },
     { name = "ma_synth",       file = "Mods/MoonringAccess/ma_synth.lua" },
     { name = "ma_shapes",      file = "Mods/MoonringAccess/ma_shapes.lua" },

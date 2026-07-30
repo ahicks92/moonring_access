@@ -303,6 +303,18 @@ local function event_placement(e)
             local t = i / frames
             return v * (i < 176 and i / 176 or (1 - t) * (1 - t)) / WALL.target_rms * 0.5
         end
+    elseif e.kind == "seg" then
+        -- Flat sustained tone with short linear fades (OniAccess's segment
+        -- tones): the level holds so back-to-back segments read as one
+        -- contour, not a row of pings.
+        local step = 2 * math.pi * (e.freq or 440) / RATE
+        local fade = math.floor((e.fade or 0.005) * RATE)
+        grain = function(i)
+            local env = 1
+            if i < fade then env = i / fade
+            elseif i >= frames - fade then env = math.max(0, (frames - i) / fade) end
+            return math.sin(i * step) * env
+        end
     else
         local step = 2 * math.pi * (e.freq or 440) / RATE
         local attack = math.floor(0.004 * RATE)
@@ -441,6 +453,68 @@ function M.play_walls(d)
         play_data(render_placements(placements))
     end)
     if not ok then require("ma_speech").log("wall echo error: " .. tostring(err)) end
+end
+
+-- ===================== Shape earcon (OniAccess port) ========================
+-- The pipe/wire connection-shape earcon from OniAccess (ShapeEarconPlayer +
+-- DirectionTones): each connected side is one short flat tone segment —
+-- north high and centered, south low and centered, east/west a middle band
+-- panned hard to their side. The ordering table turns shapes into consistent
+-- gestures: vertical = north,south; horizontal = west,east; corners lead
+-- with north (south corners lead with the horizontal, matching T forms);
+-- Ts play the crossbar around the stem; a four-way runs clockwise from
+-- north. A new earcon stops the previous one, so fast arrowing degrades to
+-- hearing each shape's opening.
+local ONI = {
+    seg = 0.055, gap = 0.010, pan = 0.79, vol = 0.35,
+    north_hz = 709, south_hz = 297, side_hz = 457,
+}
+
+-- sides: { north = bool, east = bool, south = bool, west = bool }.
+-- No connected sides = silence (callers play their own solid/unexplored cue).
+function M.shape_earcon(sides)
+    local n, s = sides.north, sides.south
+    local e, w = sides.east, sides.west
+    local U = { ONI.north_hz, 0 }
+    local D = { ONI.south_hz, 0 }
+    local L = { ONI.side_hz, -ONI.pan }
+    local R = { ONI.side_hz, ONI.pan }
+    local count = (n and 1 or 0) + (s and 1 or 0) + (e and 1 or 0) + (w and 1 or 0)
+
+    local segs
+    if count == 0 then return
+    elseif count == 1 then
+        segs = { n and U or s and D or w and L or R }
+    elseif count == 2 then
+        if n and s then segs = { U, D }
+        elseif w and e then segs = { L, R }
+        elseif n then segs = { U, w and L or R }
+        else segs = { w and L or R, D } end
+    elseif count == 3 then
+        if not n then segs = { L, D, R }
+        elseif not s then segs = { L, U, R }
+        elseif not w then segs = { U, R, D }
+        else segs = { U, L, D } end
+    else
+        segs = { U, R, D, L }
+    end
+
+    local events = {}
+    for i, t in ipairs(segs) do
+        events[#events + 1] = { kind = "seg", freq = t[1], dur = ONI.seg,
+            at = (i - 1) * (ONI.seg + ONI.gap), pan = t[2], vol = ONI.vol }
+    end
+
+    local ok, err = pcall(function()
+        local data = M.render(events)
+        if not data then return end
+        if S.earcon_src then pcall(S.earcon_src.stop, S.earcon_src) end
+        local src = love.audio.newSource(data, "static")
+        src:play()
+        S.earcon_src = src
+        S.sources[#S.sources + 1] = src
+    end)
+    if not ok then require("ma_speech").log("shape earcon error: " .. tostring(err)) end
 end
 
 -- ============================ Housekeeping ==================================

@@ -705,18 +705,195 @@ function M.tracked_where()
         :fragment(compass_offset(t.x - px, t.y - py)), true)
 end
 
+-- --------------------------------------------------------- dungeon map --
+-- In dungeons the map key shows the level as a grid of 9x9-cell block
+-- summaries (ma_blockmap; blocks align with the generator's half-chunks, so
+-- a block is usually one authored room). Arrows move block to block; each
+-- landing plays the OniAccess connection-shape earcon for which sides have
+-- potential passage, then speaks position and contents. Space reads the
+-- full per-side breakdown; Enter points the exploration cursor at the
+-- block's most useful feature and closes the map.
+
+local FEATURE_PLURALS = {
+    ["chest"] = "chests", ["warp"] = "warps", ["door"] = "doors",
+    ["locked door"] = "locked doors",
+    ["locked door, have the key"] = "locked doors, have the key",
+    ["point of interest"] = "points of interest",
+    ["stairs up"] = "stairs up", ["stairs down"] = "stairs down",
+}
+
+local function feature_text(name, count)
+    if count <= 1 then return name end
+    return count .. " " .. (FEATURE_PLURALS[name] or name)
+end
+
+-- Label features only: plain doors stay out of the quick label (the earcon
+-- already says the side connects; details carry the door/open distinction).
+local LABEL_FEATURES = { "stairs down", "stairs up",
+    "locked door, have the key", "locked door", "chest", "warp",
+    "point of interest" }
+
+local function block_position_text(bx, by, pbx, pby)
+    if not pbx then return "block " .. bx .. " " .. by end
+    if bx == pbx and by == pby then return "You" end
+    return compass_offset(bx - pbx, by - pby)
+end
+
+local function append_block_features(m, s)
+    for _, name in ipairs(LABEL_FEATURES) do
+        local f = s.feats[name]
+        if f then m:list_item(feature_text(name, f.count)) end
+    end
+    if s.water then m:list_item("water") end
+    if s.lava then m:list_item("lava") end
+    if s.void then m:list_item("void") end
+end
+
+local function block_label(ctx, grid, bx, by, pbx, pby)
+    local blockmap = require("ma_blockmap")
+    local synth = require("ma_synth")
+    local s = blockmap.summarize(grid, bx, by)
+    ctx.message:fragment(block_position_text(bx, by, pbx, pby))
+    if not s then
+        ctx.message:list_item("unknown")
+        return
+    end
+
+    local sides = s.sides
+    if sides.north or sides.east or sides.south or sides.west then
+        synth.shape_earcon({
+            north = sides.north ~= nil, east = sides.east ~= nil,
+            south = sides.south ~= nil, west = sides.west ~= nil,
+        })
+    elseif s.unexplored then
+        synth.cue("cursor_unexplored")
+    else
+        synth.cue("cursor_wall")
+    end
+
+    if s.unexplored then
+        ctx.message:list_item("unexplored")
+        return
+    end
+    if s.solid then
+        ctx.message:list_item("solid")
+        return
+    end
+    if s.frac < 0.15 then ctx.message:list_item("edge seen")
+    elseif s.frac < 0.5 then ctx.message:list_item("partly explored") end
+    append_block_features(ctx.message, s)
+end
+
+local function block_details(grid, bx, by, pbx, pby)
+    local blockmap = require("ma_blockmap")
+    local s = blockmap.summarize(grid, bx, by)
+    local lines = { block_position_text(bx, by, pbx, pby) }
+    if not s then
+        lines[#lines + 1] = "No map data."
+        return lines
+    end
+    if s.unexplored then
+        lines[#lines + 1] = "Unexplored."
+        return lines
+    end
+    lines[#lines + 1] = "Explored " .. pct(s.frac) .. " percent"
+    for _, dir in ipairs({ "north", "east", "south", "west" }) do
+        local t = s.sides[dir]
+        local m = MB.new():fragment(dir:sub(1, 1):upper() .. dir:sub(2) .. ":")
+        if not t then
+            m:fragment("wall")
+        else
+            if t.open then m:list_item("open") end
+            if t.door then m:list_item("door") end
+            if t.locked_key then m:list_item("locked door, have the key")
+            elseif t.locked then m:list_item("locked door") end
+            if t.frontier then m:list_item("unexplored beyond") end
+        end
+        lines[#lines + 1] = m:build()
+    end
+    for _, name in ipairs({ "stairs down", "stairs up",
+        "locked door, have the key", "locked door", "door", "chest", "warp",
+        "point of interest" }) do
+        local f = s.feats[name]
+        if f then lines[#lines + 1] = feature_text(name, f.count) end
+    end
+    if s.water then lines[#lines + 1] = "water" end
+    if s.lava then lines[#lines + 1] = "lava" end
+    if s.void then lines[#lines + 1] = "void" end
+    return lines
+end
+
+local function block_click(ctx, grid, bx, by)
+    local blockmap = require("ma_blockmap")
+    local s = blockmap.summarize(grid, bx, by)
+    local target = s and s.best
+    if not target then
+        ctx.message:fragment("Nothing seen there")
+        return
+    end
+    local wx, wy = require("ma_map").from_map(target.x, target.y)
+    if not wx then
+        ctx.message:fragment("Nothing seen there")
+        return
+    end
+    pcall(function() G_stateGame:setIsMapOpen(false) end)
+    require("ma_cursor").jump_to(wx, wy)
+end
+
+local function build_dungeon_map(b, grid)
+    b:capture_input()
+    local blockmap = require("ma_blockmap")
+    local pbx, pby = blockmap.player_block(grid)
+    local ids = {}
+    for by = 1, grid.bh do
+        ids[by] = {}
+        for bx = 1, grid.bw do
+            local id = Id.structural("blk:" .. bx .. ":" .. by)
+            ids[by][bx] = id
+            local cbx, cby = bx, by
+            b:add_node(id, {
+                label = function(ctx) block_label(ctx, grid, cbx, cby, pbx, pby) end,
+                on_click = function(ctx) block_click(ctx, grid, cbx, cby) end,
+                details = function() return block_details(grid, cbx, cby, pbx, pby) end,
+            })
+        end
+    end
+    for by = 1, grid.bh do
+        for bx = 1, grid.bw do
+            local id = ids[by][bx]
+            if bx > 1 then b:connect(id, "left", ids[by][bx - 1]) end
+            if bx < grid.bw then b:connect(id, "right", ids[by][bx + 1]) end
+            if by > 1 then b:connect(id, "up", ids[by - 1][bx]) end
+            if by < grid.bh then b:connect(id, "down", ids[by + 1][bx]) end
+        end
+    end
+    if pbx then b:set_start(ids[pby][pbx]) end
+end
+
 local map_screen = {
     id = "map",
     handler = function(self)
         return (in_game() and G_stateGame.isMapOpen) and "active" or "inactive"
     end,
     announce = function(self, ctx)
+        local grid = require("ma_blockmap").grid()
+        if grid then
+            local seen, total = require("ma_blockmap").seen_count(grid)
+            ctx.message:fragment("Map")
+            local wd = G_stateGame.currentWorldData
+            if wd and wd.displayName then ctx.message:list_item(clean(wd.displayName)) end
+            ctx.message:list_item(seen .. " of " .. total .. " blocks seen")
+            ctx.message:sentence("Enter jumps the cursor")
+            return
+        end
         local n = #known_locations()
         ctx.message:fragment("Map"):list_item(ma_text.plural(n, "known location"))
             :sentence("Enter tracks")
     end,
     build = function(self, b)
         if not in_game() or not G_stateGame.isMapOpen then return end
+        local grid = require("ma_blockmap").grid()
+        if grid then return build_dungeon_map(b, grid) end
         b:capture_input()
         local list = known_locations()
         if #list == 0 then
