@@ -125,7 +125,25 @@ local function describe(x, y, full)
     end
     for _, tn in ipairs(triggers_at(x, y)) do parts[#parts + 1] = tn end
 
-    local shape = shape_at(x, y)
+    -- Shape vocabulary (hallway/corner/dead end) only makes sense on a tile
+    -- you could stand on. On a blocked tile the useful inverse is which way
+    -- the wall continues.
+    local shape
+    if map.blocked(x, y) then
+        local runs = {}
+        if map.blocked(x, y - 1) then runs[#runs + 1] = "north" end
+        if map.blocked(x, y + 1) then runs[#runs + 1] = "south" end
+        if map.blocked(x - 1, y) then runs[#runs + 1] = "west" end
+        if map.blocked(x + 1, y) then runs[#runs + 1] = "east" end
+        if #runs > 0 and #runs < 4 then
+            shape = "continues " .. table.concat(runs, " and ")
+        elseif #runs == 0 then
+            shape = "isolated"
+        end
+        -- all four blocked: interior of a mass, say nothing
+    else
+        shape = shape_at(x, y)
+    end
     if shape and (full or shape ~= C.last_shape) then parts[#parts + 1] = shape end
     C.last_shape = shape
 
