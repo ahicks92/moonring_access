@@ -18,7 +18,11 @@ local S = st.scanner
 
 local M = {}
 
-local SCAN_RADIUS = 40   -- tiles around the player, comfortably > the window
+-- The whole 96x96 map window: the scanner is the MEMORY tool, and a known
+-- staircase on the far side of the level must always list (40 truncated
+-- large maps from a corner). Remembered-gating keeps the sweep honest; the
+-- cost is a one-frame rescan hitch at worst.
+local SCAN_RADIUS = 95
 
 local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "hazards", "signs", "secrets", "all" }
 local CAT_NAMES = {
