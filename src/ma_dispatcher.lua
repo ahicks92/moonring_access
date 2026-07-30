@@ -92,6 +92,10 @@ local function focus_fields(graph, state, res)
     res.focus_key = state.cur and state.cur.key
     res.deferred = node and node.vtable.deferred or nil
     res.details = node and node.vtable.details or nil
+    -- on_focus (optional vtable slot): write-only game-cursor sync, so game
+    -- code keyed off its own cursor (digit shortcut binding, hover text)
+    -- follows OUR focus. Runs after every focus-landing event; idempotent.
+    if node and node.vtable.on_focus then pcall(node.vtable.on_focus) end
     return res
 end
 

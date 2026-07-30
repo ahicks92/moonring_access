@@ -453,6 +453,41 @@ function M.status_tick()
     else
         W.detect_r = nil
     end
+
+    -- Digit-shortcut bindings (skills from the gods screen, items from the
+    -- inventory — the game's own 1-0 quickslots). Announce changes; the
+    -- first scan after load is a silent baseline.
+    pcall(function()
+        local tree = G_stateGame.skillTree
+        local panel = G_stateGame.inventoryPanel
+        local n = G_NumberOfSkillBindings or 10
+        local first = W.binds == nil
+        W.binds = W.binds or {}
+        for i = 1, n do
+            local sig, spoken
+            local skill_id = tree.skillBindings[i]
+            local item = panel.inventoryBindings[i]
+            if skill_id then
+                sig = "s:" .. tostring(skill_id)
+                local act = nil
+                pcall(function() act = G_stateGame.actorManager:getActionWithName(skill_id) end)
+                spoken = (act and act.name) or tostring(skill_id)
+            elseif item then
+                sig = "i:" .. tostring(item.ID)
+                local ok2, nm = pcall(G_stateGame.getInventoryObjectName, G_stateGame, item.ID)
+                spoken = require("ma_text").clean((ok2 and nm) or item.name or "item")
+            end
+            local slot_key = i == 10 and 0 or i   -- slot 10 is the 0 key
+            if not first and sig ~= W.binds[i] then
+                if sig then
+                    speech.say("Bound to " .. slot_key .. ": " .. spoken .. ".", true)
+                elseif W.binds[i] then
+                    speech.say("Slot " .. slot_key .. " cleared.", true)
+                end
+            end
+            W.binds[i] = sig
+        end
+    end)
 end
 
 local function announce_modes()

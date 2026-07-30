@@ -314,6 +314,11 @@ local inventory = {
                     if ok and worn then ctx.message:fragment("equipped") end
                     ctx.message:fragment(idx .. " of " .. #inv)
                 end,
+                -- Cursor sync on focus: the panel's digit-shortcut binding
+                -- (1-0 bind a usable item) reads ITS cursor.
+                on_focus = function()
+                    panel.cursorPosition = idx
+                end,
                 on_click = function(ctx)
                     panel.cursorPosition = idx
                     panel:selectItemUnderCursor()

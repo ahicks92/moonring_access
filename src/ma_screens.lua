@@ -541,6 +541,14 @@ local gods = {
                                 if state then ctx.message:fragment(state) end
                             end
                         end,
+                        -- Cursor sync on focus: the tree's digit-shortcut
+                        -- binding (1-0 bind an owned gift) reads ITS cursor,
+                        -- so it must follow ours.
+                        on_focus = function()
+                            tree.cursorPos.x = xx - 1
+                            tree.cursorPos.y = yy - 1
+                            pcall(tree.updateCurrentTileText, tree)
+                        end,
                         on_click = function(ctx)
                             tree.cursorPos.x = xx - 1
                             tree.cursorPos.y = yy - 1
