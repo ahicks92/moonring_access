@@ -782,7 +782,7 @@ local function block_label(ctx, grid, bx, by, pbx, pby)
             -- a room whose door we haven't found, or genuine solid fill).
             m:list_item("entrance unseen")
         else
-            if s.frac < 0.15 then m:list_item("edge seen")
+            if s.frac < 0.15 then m:list_item("glimpsed")
             elseif s.frac < 0.5 then m:list_item("partly explored") end
             append_block_features(m, s)
         end
