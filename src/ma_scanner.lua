@@ -111,6 +111,10 @@ local function build_snapshot()
     local px, py = p.position.x, p.position.y
     local feats = {}
 
+    -- Where ground pickups skip the fog gate (icon-advertised wilderness).
+    local wn = tostring(G_stateGame.currentWorldName or "")
+    local pickup_exempt = (wn == "Zoom" or wn == "Overworld")
+
     -- Actors. Personhood is villageSim membership / person actorTypes /
     -- player-faction allies — NOT faction: neutral wildlife (faction "none",
     -- e.g. boars) is killable fauna, i.e. Monsters.
@@ -187,7 +191,17 @@ local function build_snapshot()
                                 a = nil
                             end
                             if a == "object" then
-                                a = nil   -- handled level-wide below, fog-exempt
+                                -- Wilderness zooms/overworld: handled level-
+                                -- wide below (fog-exempt, icon-advertised).
+                                -- Dungeons/towns: fog-gated HERE (this loop
+                                -- only visits remembered tiles) — a dungeon
+                                -- floor must not spoiler-dump its drops.
+                                if not pickup_exempt then
+                                    local f = trigger_feature(x, y, map.object_name(t.data) or "item")
+                                    f.cat = "loot"
+                                    feats[#feats + 1] = f
+                                end
+                                a = nil
                             end
                             if a == "read" then
                                 feats[#feats + 1] = trigger_feature(x, y, "something readable")
@@ -207,20 +221,22 @@ local function build_snapshot()
         end
     end
 
-    -- Ground pickups ("object" triggers: berries, herbs, dropped items),
-    -- level-wide and FOG-EXEMPT: when an overworld icon advertises the
-    -- area's contents, quartering a scrub tile-by-tile to make the pickup
-    -- "known" is asymmetric busywork a sighted sweep doesn't pay. Named
-    -- from their object type, filed Loot.
-    pcall(function()
-        local list = G_stateGame.triggerData:getAllTriggersOnLevelWithActionName(
-            G_stateGame.currentWorldName, "object")
-        for _, t in ipairs(list or {}) do
-            local f = trigger_feature(t.x, t.y, map.object_name(t.data) or "item")
-            f.cat = "loot"
-            feats[#feats + 1] = f
-        end
-    end)
+    -- Ground pickups in icon-advertised wilderness (Overworld / generic
+    -- Zoom): level-wide and FOG-EXEMPT — the overworld icon already told
+    -- everyone what's here, and quartering a scrub tile-by-tile to make the
+    -- pickup "known" is asymmetric busywork. Named worlds (dungeons, towns)
+    -- take the fog-gated path in the tile loop above instead.
+    if pickup_exempt then
+        pcall(function()
+            local list = G_stateGame.triggerData:getAllTriggersOnLevelWithActionName(
+                G_stateGame.currentWorldName, "object")
+            for _, t in ipairs(list or {}) do
+                local f = trigger_feature(t.x, t.y, map.object_name(t.data) or "item")
+                f.cat = "loot"
+                feats[#feats + 1] = f
+            end
+        end)
+    end
 
     -- Merged area exits (anchored at their interior-connected tile), where
     -- at least one run tile has been explored.
