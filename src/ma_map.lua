@@ -134,7 +134,7 @@ local OBJECT_ROOTS = {
     barrelClosed = true, barrelOpen = true,
     bookshelf = true, bookshelfSearched = true, bookshelfEmpty = true,
 }
-local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true }
+local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true, mon = true }
 
 local function trigger_actions_at(x, y)
     local actions = {}
