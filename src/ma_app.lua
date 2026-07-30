@@ -363,6 +363,62 @@ function M.status_tick()
         st.band = v > 0 and band or 0
     end
 
+    -- Gaze/grapple links touching the player: the beam sighted players
+    -- watch. Announce the link forming (type, source, offset) and breaking.
+    -- The game's own "stares at you!" line is indoors-only and the break is
+    -- particles + sfx, so outside (sailing grapples!) this is the only
+    -- speech there is.
+    pcall(function()
+        local tsm = G_stateGame.tileScreenManager
+        local world = tostring(G_stateGame.currentWorldName)
+        local silent = W.links_world ~= world   -- world swap: no break spam
+        W.links_world = world
+        local seen = {}
+        for _, link in ipairs(tsm.links or {}) do
+            if link.ID1 == p.ID or link.ID2 == p.ID then
+                local key = tostring(link.label) .. ":" .. tostring(link.ID1)
+                    .. ":" .. tostring(link.ID2)
+                seen[key] = true
+                if not (W.links and W.links[key]) then
+                    local other_id = link.ID1 == p.ID and link.ID2 or link.ID1
+                    local other = G_stateGame.actorManager:getActorWithID(other_id)
+                    local oname = "something"
+                    pcall(function() oname = other:getDisplayName() end)
+                    -- "flameGazeLink" -> action "flameGaze" -> "Firegaze"
+                    local action_key = tostring(link.label):gsub("Link$", "")
+                    local pretty = action_key
+                    pcall(function()
+                        local list = G_stateGame.actorManager:getActionClass():getActionList()
+                        pretty = (list[action_key] and list[action_key].name)
+                            or (list[link.label] and list[link.label].name) or action_key
+                    end)
+                    local where = ""
+                    pcall(function()
+                        local t = require("ma_text")
+                        where = ", " .. t.offset(other.position.x - p.position.x,
+                            other.position.y - p.position.y)
+                    end)
+                    local phrase = link.ID1 == p.ID
+                        and (pretty .. " link to " .. oname .. where .. ".")
+                        or (pretty .. " link from " .. oname .. where .. "!")
+                    W.links = W.links or {}
+                    W.links[key] = { pretty = pretty, oname = oname, incoming = link.ID2 == p.ID }
+                    if not silent then speech.say(phrase, true) end
+                end
+            end
+        end
+        for key, info in pairs(W.links or {}) do
+            if not seen[key] then
+                W.links[key] = nil
+                if not silent then
+                    speech.say(info.pretty .. " link "
+                        .. (info.incoming and ("from " .. info.oname) or ("to " .. info.oname))
+                        .. " broken.", false)
+                end
+            end
+        end
+    end)
+
     -- Detection radius, sneaking only: the dashed aggro ring sighted
     -- players watch (drawAggroRange draws it only while sneaking). Shrinks
     -- against walls and in cover, grows next to light — announce every
