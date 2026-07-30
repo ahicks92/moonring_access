@@ -298,6 +298,24 @@ local function discover_landmarks()
             end
         end
     end
+    -- Merged area exits: announce a run once, when ANY of its tiles becomes
+    -- visible, with the offset to its interior-connected anchor.
+    for _, e in ipairs(ma_map.area_exits()) do
+        local key = "exit:" .. e.key
+        if not seen[key] then
+            for _, t in ipairs(e.tiles) do
+                if ma_map.visible(t.x, t.y) then
+                    seen[key] = true
+                    local label = "area exit " .. e.edge
+                        .. (e.width > 1 and (", " .. e.width .. " wide") or "")
+                    found[#found + 1] = { d = text.dist(e.x - px, e.y - py),
+                        s = label .. ", " .. text.offset(e.x - px, e.y - py) }
+                    break
+                end
+            end
+        end
+    end
+
     if #found > 0 then
         table.sort(found, function(a, b) return a.d < b.d end)
         local parts = {}

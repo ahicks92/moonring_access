@@ -173,6 +173,28 @@ local function build_snapshot()
         end
     end
 
+    -- Merged area exits (anchored at their interior-connected tile), where
+    -- at least one run tile has been explored.
+    for _, e in ipairs(map.area_exits()) do
+        local known = false
+        for _, t in ipairs(e.tiles) do
+            if map.remembered(t.x, t.y) then known = true break end
+        end
+        if known then
+            local ex, ey = e.x, e.y
+            feats[#feats + 1] = {
+                key = "exit:" .. e.key,
+                cat = "stairs",
+                name = function()
+                    return "area exit " .. e.edge
+                        .. (e.width > 1 and (", " .. e.width .. " wide") or "")
+                end,
+                pos = function() return ex, ey end,
+                visible = function() return map.visible(ex, ey) or false end,
+            }
+        end
+    end
+
     -- Nearest-first within the snapshot (frozen order).
     for _, f in ipairs(feats) do
         local x, y = f.pos()

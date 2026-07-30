@@ -73,6 +73,56 @@ function M.trap_revealed_root(root)
     return root and REVEALED_TRAP_ROOTS[root] or false
 end
 
+-- Area exits: walkable tiles on the current world's boundary (stepping past
+-- them leaves the zoom/town — visually the world just ends there). Adjacent
+-- boundary tiles MERGE into one exit per contiguous run, anchored at the
+-- run tile that connects to the interior (nearest run-center among tiles
+-- with an inward walkable neighbor). A run sealed off from the inside is
+-- not an exit. Returns { {x, y, width, edge, key, tiles} ... }.
+function M.area_exits()
+    if not G_stateGame then return {} end
+    local wd = G_stateGame.currentWorldData
+    if not wd or G_stateGame.currentWorldName == "Overworld" then return {} end
+    local minX, maxX, minY, maxY = wd.minX, wd.maxX, wd.minY, wd.maxY
+    if not (minX and maxX and minY and maxY) then return {} end
+
+    local exits = {}
+    local function scan_edge(edge, x0, y0, sx, sy, len, ix, iy)
+        local run = nil
+        for i = 0, len do
+            local x, y = x0 + sx * i, y0 + sy * i
+            local walk = M.walkable(x, y) == true
+            if walk then
+                run = run or {}
+                run[#run + 1] = { x = x, y = y }
+            end
+            if run and (not walk or i == len) then
+                local best, mid = nil, (#run + 1) / 2
+                for j, t in ipairs(run) do
+                    if M.walkable(t.x + ix, t.y + iy) == true then
+                        if not best or math.abs(j - mid) < math.abs(best.j - mid) then
+                            best = { j = j, t = t }
+                        end
+                    end
+                end
+                if best then
+                    exits[#exits + 1] = {
+                        x = best.t.x, y = best.t.y, width = #run, edge = edge,
+                        key = edge .. ":" .. run[1].x .. "," .. run[1].y .. "x" .. #run,
+                        tiles = run,
+                    }
+                end
+                run = nil
+            end
+        end
+    end
+    scan_edge("north", minX, minY, 1, 0, maxX - minX, 0, 1)
+    scan_edge("south", minX, maxY, 1, 0, maxX - minX, 0, -1)
+    scan_edge("west", minX, minY, 0, 1, maxY - minY, 1, 0)
+    scan_edge("east", maxX, minY, 0, 1, maxY - minY, -1, 0)
+    return exits
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end
