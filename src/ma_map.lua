@@ -268,13 +268,15 @@ function M.area_exit_edge_at(x, y)
     return table.concat(edges, " ")
 end
 
--- Path shape naming (Factorio Access's pipe/network shape logic, compass
--- wording): a path tile is described by which cardinal neighbors are also
--- path — end / straight / corner / T / crossroads. Returns (text, key):
--- text is the spoken name ("Path corner, north and east"), key a stable
--- differential token so walkers and the cursor speak only shape CHANGES —
--- following a road is silent until it bends, branches, or ends.
+-- Path shape naming: Factorio Access's pipe shape verbalization (fa-info.lua
+-- ent_info_pipe_shape + entity-info.cfg locale). Straights are vertical or
+-- horizontal; an end is named for the side the stub FACES (connected north =
+-- "south end"); corners list the vertical connection then the horizontal;
+-- a T is its through-line plus the branch direction. Returns (text, key):
+-- key is a stable differential token so walkers and the cursor speak only
+-- shape CHANGES — following a road is silent until it bends or branches.
 local PATH_ROOTS = { path = true, bridge = true }
+local OPPOSITE = { north = "south", south = "north", east = "west", west = "east" }
 
 function M.path_shape_text(x, y)
     local root = M.root(x, y)
@@ -287,30 +289,27 @@ function M.path_shape_text(x, y)
 
     local key = "path:" .. (n and "n" or "") .. (e and "e" or "")
         .. (s and "s" or "") .. (w and "w" or "")
-    local dirs = {}
-    if n then dirs[#dirs + 1] = "north" end
-    if e then dirs[#dirs + 1] = "east" end
-    if s then dirs[#dirs + 1] = "south" end
-    if w then dirs[#dirs + 1] = "west" end
+    local count = (n and 1 or 0) + (s and 1 or 0) + (e and 1 or 0) + (w and 1 or 0)
 
-    local count = #dirs
-    if count == 0 then return label .. ", isolated", key end
-    if count == 1 then return label .. " end, continues " .. dirs[1], key end
+    if count == 0 then return label .. ", lonely", key end
+    if count == 1 then
+        local conn = n and "north" or s and "south" or e and "east" or "west"
+        return label .. ", " .. OPPOSITE[conn] .. " end", key
+    end
     if count == 2 then
-        if n and s then return label .. ", north to south", key end
-        if e and w then return label .. ", east to west", key end
-        return label .. " corner, " .. dirs[1] .. " and " .. dirs[2], key
+        if n and s then return label .. ", vertical", key end
+        if e and w then return label .. ", horizontal", key end
+        local vert = n and "north" or "south"
+        local horiz = e and "east" or "west"
+        return label .. ", corner " .. vert .. " and " .. horiz, key
     end
     if count == 3 then
-        local axis, branch
         if n and s then
-            axis, branch = "north to south", (e and "east" or "west")
-        else
-            axis, branch = "east to west", (n and "north" or "south")
+            return label .. ", vertical and " .. (e and "east" or "west"), key
         end
-        return label .. " T, " .. axis .. ", branch " .. branch, key
+        return label .. ", horizontal and " .. (n and "north" or "south"), key
     end
-    return label .. " crossroads", key
+    return label .. ", cross", key
 end
 
 -- Light emitted by the CELL at x,y (torches, glowing mushrooms, crystal
