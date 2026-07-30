@@ -25,9 +25,19 @@ Q quiet, R ranged, I inventory, Escape menu bar, ` console...). The mod adds:
   the visible cloud words); numpad 0 or slash recenters on you. The cursor
   re-homes to you each game turn. (The numpad is never required — every
   numpad key has or will get a main-keyboard twin.)
-- Wall echo: after each step, four noise pings sound the distance to walls —
-  left/right panned, north a fifth higher, south a fifth lower, closer =
-  sooner and louder. Ctrl+E toggles.
+- Wall echo (Ctrl+E toggles; Ctrl+W opens the live tuning menu): movement-
+  relative, compass-fixed. One noise ping for the wall in your direction of
+  travel — west always hard left, east always hard right, north a rising
+  pair centered, south a falling pair centered; closer = sooner and louder.
+  Flank width monitors chirp when a side's clearance changes: pan carries
+  east/west, register carries north/south (high = north, low+slow = south),
+  gentle contour = widened, loud contour = narrowed, and south's contour
+  inverts so the pitch motion draws the direction the space extends.
+- Step sounds (Ctrl+F toggles): each move plays a terrain-keyed cue — wood
+  knock, soft rustle, stone tick, water double-blip, sand hiss.
+- Secrets: Ctrl+S speaks how many hidden doors and traps remain on the level
+  (counts only); the scanner's Secrets category lists locations. Reveals
+  announce where ("Secret door, 2 left").
 - Scanner: PageUp/PageDown step through found features nearest-first;
   Ctrl+PageUp/PageDown switch category (Visible, Monsters, People, Doors,
   Stairs and exits, Loot, Readables, Everything); Home points the exploration
@@ -36,6 +46,8 @@ Q quiet, R ranged, I inventory, Escape menu bar, ` console...). The mod adds:
   notable terrain, grouped.
 - Status: Ctrl+X vitals, Ctrl+M money, Ctrl+P position, Ctrl+T turn count,
   Ctrl+Q safety/quiet modes, Ctrl+C character summary.
+- Tutorials are captured modals: any direction key re-reads, Enter dismisses;
+  tutorial and alert text also lands in the Game log buffer.
 - Review buffers: Ctrl+Left/Right switch buffer (Game log, Conversation),
   Ctrl+Up/Down step lines (up = older; snaps to latest on new content).
 
