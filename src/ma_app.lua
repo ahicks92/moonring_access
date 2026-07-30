@@ -120,11 +120,12 @@ end
 local function announce_pois()
     local found = {}
     each_gated_tile("visible", function(x, y, dx, dy, root)
-        if root and POI_ROOTS[root] then
+        local things, merged = require("ma_map").tile_things(x, y)
+        if not merged and root and POI_ROOTS[root] then
             found[#found + 1] = { d = text.dist(dx, dy),
                 s = root_name(root) .. ", " .. text.offset(dx, dy) }
         end
-        for _, tn in ipairs(trigger_names_at(x, y)) do
+        for _, tn in ipairs(things) do
             found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
         end
     end)

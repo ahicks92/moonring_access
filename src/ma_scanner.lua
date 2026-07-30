@@ -39,7 +39,8 @@ local STAIR_ROOTS = {
     trapdoorOpen = true, trapdoorClosed = true,
 }
 local LOOT_ROOTS = {
-    chestClosed = true, crateClosed = true, barrelClosed = true, bookshelf = true,
+    chestClosed = true, chestLocked = true, crateClosed = true, crateHuge = true,
+    barrelClosed = true, bookshelf = true,
 }
 
 -- ----------------------------------------------------------- feature kinds --
@@ -155,6 +156,12 @@ local function build_snapshot()
                     if ok and type(list) == "table" then
                         for _, t in ipairs(list) do
                             local a = t and t.action
+                            -- Object-tile mechanics (container/locked_chest)
+                            -- are represented by their LOOT_ROOTS tile, not
+                            -- as separate features.
+                            if a == "container" or a == "locked_chest" then
+                                a = nil
+                            end
                             if a == "read" then
                                 feats[#feats + 1] = trigger_feature(x, y, "something readable")
                             elseif a == "search" then

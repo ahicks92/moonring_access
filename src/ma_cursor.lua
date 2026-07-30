@@ -112,9 +112,12 @@ local function describe(x, y, full)
         return parts
     end
 
+    -- Object tiles merge root + triggers into one name ("Chest (locked)");
+    -- other tiles speak the plain root, with trigger names as extras below.
     local root = map.root(x, y)
+    local things, merged = map.tile_things(x, y)
     if full or root ~= C.last_root then
-        parts[#parts + 1] = map.root_name(root)
+        parts[#parts + 1] = merged and things[1] or map.root_name(root)
     end
     C.last_root = root
 
@@ -129,7 +132,9 @@ local function describe(x, y, full)
         end
         parts[#parts + 1] = label
     end
-    for _, tn in ipairs(triggers_at(x, y)) do parts[#parts + 1] = tn end
+    if not merged then
+        for _, tn in ipairs(things) do parts[#parts + 1] = tn end
+    end
 
     -- Landmark tier, always spoken: standing on a walkable boundary tile
     -- means stepping outward here leaves the area.

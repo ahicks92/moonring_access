@@ -123,6 +123,71 @@ function M.area_exits()
     return exits
 end
 
+-- Object roots: one physical thing the player interacts with. The game
+-- models these as root + one or more triggers (a locked chest is root
+-- chestLocked + a `container` trigger for contents + a `locked_chest`
+-- trigger for the lock); for speech they merge into ONE entry.
+local OBJECT_ROOTS = {
+    chestClosed = true, chestOpen = true, chestLocked = true,
+    crateClosed = true, crateOpen = true, crateHuge = true,
+    crateHugeOpen = true, crateHugeBroken = true,
+    barrelClosed = true, barrelOpen = true,
+    bookshelf = true, bookshelfSearched = true, bookshelfEmpty = true,
+}
+local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true }
+
+local function trigger_actions_at(x, y)
+    local actions = {}
+    if not (G_stateGame and G_stateGame.triggerData and G_stateGame.currentWorldName) then return actions end
+    local ok, list = pcall(G_stateGame.triggerData.getAllTriggersOnLevelAtXYZeroIndexed,
+        G_stateGame.triggerData, G_stateGame.currentWorldName, x, y)
+    if ok and type(list) == "table" then
+        for _, t in ipairs(list) do
+            if t and t.action then actions[#actions + 1] = tostring(t.action) end
+        end
+    end
+    return actions
+end
+
+-- Spoken names for the things on a tile. An object root absorbs its own
+-- triggers into one entry (the game's display name — which already carries
+-- lock state — plus modifiers it doesn't). Non-object tiles list trigger
+-- names individually. NEVER exposes trigger data fields (contents / which
+-- key): sighted players can't see inside either.
+-- Returns names(list), merged(bool — an object entry absorbed the tile).
+function M.tile_things(x, y)
+    local root = M.root(x, y)
+    local actions = trigger_actions_at(x, y)
+    if root and OBJECT_ROOTS[root] then
+        local base = M.root_name(root) or "container"
+        local lower = base:lower()
+        local mods = {}
+        for _, a in ipairs(actions) do
+            if a == "locked_chest" then
+                if not lower:find("locked") then mods[#mods + 1] = "locked" end
+            elseif a == "container" then
+                -- implied by the object itself
+            elseif a == "search" then mods[#mods + 1] = "searchable"
+            elseif a == "read" then mods[#mods + 1] = "readable"
+            elseif a == "warp" then mods[#mods + 1] = "passage"
+            elseif not SKIP_ACTIONS[a] then mods[#mods + 1] = a end
+        end
+        local name = base
+        if #mods > 0 then name = name .. ", " .. table.concat(mods, ", ") end
+        return { name }, true
+    end
+    local names = {}
+    for _, a in ipairs(actions) do
+        if a == "read" then names[#names + 1] = "something readable"
+        elseif a == "search" then names[#names + 1] = "searchable spot"
+        elseif a == "warp" then names[#names + 1] = "passage"
+        elseif a == "container" then names[#names + 1] = "container"
+        elseif a == "locked_chest" then names[#names + 1] = "locked container"
+        elseif not SKIP_ACTIONS[a] then names[#names + 1] = a end
+    end
+    return names, false
+end
+
 -- Is this tile a walkable boundary tile (part of some exit run)? Returns the
 -- edge name(s) or nil. Cheap point query for the cursor — no run merging.
 function M.area_exit_edge_at(x, y)
