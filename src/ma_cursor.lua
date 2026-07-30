@@ -123,9 +123,14 @@ local function describe(x, y, full)
 
     local occupant = map.creature_at(x, y)
     if occupant then
-        local ok, name = pcall(occupant.getDisplayName, occupant)
-        local label = ok and name or "creature"
-        if occupant.health and occupant.maxHealth and occupant.maxHealth > 0
+        local label
+        if occupant.isPlayer then
+            label = "you"   -- the overworld player actor has no display name
+        else
+            local ok, name = pcall(occupant.getDisplayName, occupant)
+            label = ok and name or "creature"
+        end
+        if occupant and occupant.health and occupant.maxHealth and occupant.maxHealth > 0
             and not occupant.isPlayer then
             label = label .. ", " .. math.floor(occupant.health / occupant.maxHealth * 100 + 0.5)
                 .. " percent"
@@ -244,12 +249,15 @@ function M.jump_to(x, y)
     M.read()
 end
 
--- Follow: re-home to the player when a game turn passed (called per pump).
+-- Follow: re-home to the player when a game turn passed, and ALWAYS on a
+-- world transition (stale cross-world coordinates are meaningless).
 function M.follow_tick()
     if not G_stateGame then return end
+    local world = G_stateGame.currentWorldName
     local turns = G_stateGame.playerTurns or 0
-    if C.follow_turn ~= turns then
+    if C.follow_turn ~= turns or C.world ~= world then
         C.follow_turn = turns
+        C.world = world
         local px, py = player_pos()
         if px and (C.x ~= px or C.y ~= py) then
             C.x, C.y = px, py

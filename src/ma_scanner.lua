@@ -41,6 +41,10 @@ local DOOR_ROOTS = {
 local STAIR_ROOTS = {
     stairsUp = true, stairsDown = true, floorDoor = true,
     trapdoorOpen = true, trapdoorClosed = true,
+    -- Overworld: enterable locations and ship jetties are this map's exits.
+    village = true, cave_entrance = true, henge = true, ruin = true,
+    tower = true,
+    jettyNorth = true, jettySouth = true, jettyEast = true, jettyWest = true,
 }
 local LOOT_ROOTS = {
     chestClosed = true, chestLocked = true, crateClosed = true, crateHuge = true,
