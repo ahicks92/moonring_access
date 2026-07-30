@@ -50,9 +50,35 @@ end
 --            vol=0..1, q=bandpass Q (noise only)} ... }
 -- Renders everything into ONE stereo SoundData and plays it (a shared buffer
 -- keeps multi-ping cues phase-coherent, per Tanglebeep's combat radar).
+
+-- Dev introspection: per-channel energy of a render, to verify panning
+-- reaches the samples (curl /eval require('ma_synth').channel_energy{...}).
+function M.channel_energy(events)
+    local l, r = 0, 0
+    local data = M.render(events)
+    if not data then return "render failed" end
+    for i = 0, data:getSampleCount() - 1 do
+        l = l + math.abs(data:getSample(i, 1))
+        r = r + math.abs(data:getSample(i, 2))
+    end
+    return string.format("left=%.1f right=%.1f", l, r)
+end
+
 function M.play(events)
     if not events or #events == 0 then return end
     local ok, err = pcall(function()
+        local data = M.render(events)
+        if not data then return end
+        local src = love.audio.newSource(data, "static")
+        src:play()
+        S.sources[#S.sources + 1] = src
+    end)
+    if not ok then require("ma_speech").log("synth error: " .. tostring(err)) end
+end
+
+function M.render(events)
+    if not events or #events == 0 then return nil end
+    local ok, result = pcall(function()
         local total = 0
         for _, e in ipairs(events) do
             total = math.max(total, (e.at or 0) + (e.dur or 0.05))
@@ -76,26 +102,37 @@ function M.play(events)
             local ldelay = pan > 0 and itd or 0
             local rdelay = pan < 0 and itd or 0
 
-            local gen
+            -- Pre-generate the grain, then NORMALIZE its peak before the
+            -- envelope. Critical for narrow bandpass noise: at Q=30 the
+            -- filter passes a ~9 Hz sliver of the white noise's energy and
+            -- the raw ping comes out ~25 dB under everything else (the
+            -- Tanglebeep noise pool was RMS-normalized for exactly this).
+            local grain = {}
+            local peak = 0
             if e.kind == "noise" then
                 local bp = bandpass_new(e.freq or 261.63, e.q or 30)
                 -- Deterministic LCG so cue timbre is stable run to run.
                 local seed = math.floor((e.freq or 261) * 7919) % 2147483647
-                gen = function()
+                for i = 0, grain_n - 1 do
                     seed = (seed * 48271) % 2147483647
-                    return bp((seed / 2147483647) * 2 - 1) * 4
+                    local s = bp((seed / 2147483647) * 2 - 1)
+                    grain[i] = s
+                    local a = math.abs(s)
+                    if a > peak then peak = a end
                 end
             else
                 local phase, step = 0, 2 * math.pi * (e.freq or 440) / RATE
-                gen = function()
+                for i = 0, grain_n - 1 do
                     phase = phase + step
-                    return math.sin(phase)
+                    grain[i] = math.sin(phase)
                 end
+                peak = 1
             end
+            local norm = peak > 0 and (1 / peak) or 1
 
             local attack = math.floor(0.004 * RATE)
             for i = 0, grain_n - 1 do
-                local s = gen() * envelope(i, grain_n, attack)
+                local s = grain[i] * norm * envelope(i, grain_n, attack)
                 local li = start + i + ldelay
                 local ri = start + i + rdelay
                 if li < n then left[li] = left[li] + s * lg end
@@ -110,11 +147,13 @@ function M.play(events)
             data:setSample(i, 1, l)
             data:setSample(i, 2, r)
         end
-        local src = love.audio.newSource(data, "static")
-        src:play()
-        S.sources[#S.sources + 1] = src
+        return data
     end)
-    if not ok then require("ma_speech").log("synth error: " .. tostring(err)) end
+    if not ok then
+        require("ma_speech").log("synth render error: " .. tostring(result))
+        return nil
+    end
+    return result
 end
 
 -- Terrain-differentiated footstep cue: what the game designed and abandoned
