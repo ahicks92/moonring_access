@@ -252,6 +252,8 @@ function M.watch_tick()
     local x, y = p.position.x, p.position.y
     if x == W.px and y == W.py then return end
     local first = W.px == nil
+    local mdx, mdy = nil, nil
+    if not first then mdx, mdy = x - W.px, y - W.py end
     W.px, W.py = x, y
     if first then W.root = nil; return end   -- world entry; "Entering X" covers it
 
@@ -271,11 +273,12 @@ function M.watch_tick()
     end
 
     -- The wall echo fires on every real move (the primary spatial channel),
-    -- preceded by a terrain-differentiated step cue.
+    -- preceded by a terrain-differentiated step cue. The movement delta gives
+    -- the echo its heading (forward ping + side-width monitors).
     if W.steps_enabled ~= false then
         pcall(function() require("ma_synth").step_cue(root) end)
     end
-    pcall(function() require("ma_echo").on_move() end)
+    pcall(function() require("ma_echo").on_move(mdx, mdy) end)
 end
 
 -- --------------------------------------------------------- reveal watchers --

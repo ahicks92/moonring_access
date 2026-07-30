@@ -38,20 +38,51 @@ function M.enabled()
     return E.enabled
 end
 
-function M.on_move()
+-- Movement-relative echo (Shades-of-Doom lineage, per Austin):
+--   * ONE forward ping, only in the direction just moved. North/south keep
+--     their fifth-up/fifth-down pitch, centered. East/west pings PAN BY
+--     PROXIMITY: hard-side while the wall is distant, sliding toward center
+--     as it closes — centered means it is in your face.
+--   * Side-width monitors: what a moving player actually wants is "did my
+--     sides get wider or narrower". Sides are relative to heading (moving
+--     west, south is your left). When a side's clearance CHANGES since the
+--     last same-heading step, that side chirps: up = widened, down =
+--     narrowed. A heading change resets the baseline silently (the axes no
+--     longer compare).
+function M.on_move(dx, dy)
     if not E.enabled then return end
+    -- Only cardinal single steps carry heading; teleports/world swaps reset.
+    if not dx or math.abs(dx) + math.abs(dy) ~= 1 then
+        E.prev = nil
+        return
+    end
     local p = map.player()
     if not p or not p.position then return end
     local px, py = p.position.x, p.position.y
 
-    -- All tuning (pitches, ADSR, distance law, loudness trims, decorrelated
-    -- noise pools) lives in ma_synth's WallEchoCue port.
-    synth.play_walls({
-        up = wall_distance(px, py, 0, -1),
-        down = wall_distance(px, py, 0, 1),
-        left = wall_distance(px, py, -1, 0),
-        right = wall_distance(px, py, 1, 0),
-    })
+    -- Forward ping.
+    local d = wall_distance(px, py, dx, dy)
+    if d then
+        if dy ~= 0 then
+            synth.play_wall_forward(dy < 0 and "up" or "down", d, 0)
+        else
+            local mag = math.min(1, math.max(0, (d - 1) / (MAX_DIST - 1)))
+            synth.play_wall_forward("base", d, (dx < 0 and -1 or 1) * mag)
+        end
+    end
+
+    -- Side widths, perpendicular to heading. left = heading rotated CCW in
+    -- screen coords: (dy, -dx); verified: moving west (-1,0) -> left (0,1) =
+    -- south. Open beyond range counts as MAX_DIST + 1 so "wall came into
+    -- range" and "wall left range" both register as changes.
+    local lw = wall_distance(px, py, dy, -dx) or (MAX_DIST + 1)
+    local rw = wall_distance(px, py, -dy, dx) or (MAX_DIST + 1)
+    local heading = dx .. "," .. dy
+    if E.prev and E.prev.heading == heading then
+        if lw ~= E.prev.lw then synth.width_cue(-1, lw > E.prev.lw) end
+        if rw ~= E.prev.rw then synth.width_cue(1, rw > E.prev.rw) end
+    end
+    E.prev = { heading = heading, lw = lw, rw = rw }
 end
 
 return M

@@ -351,6 +351,35 @@ local function wall_placement(dist, pool, pan, loudness)
     }
 end
 
+-- One forward wall ping with an explicit pan (the movement-direction echo).
+-- band: "base" (east/west pitch), "up", "down". Distance still drives onset
+-- delay and gain by the same adjacent-referenced law.
+function M.play_wall_forward(band, dist, pan)
+    local ok, err = pcall(function()
+        local pool
+        if band == "up" then pool = pool_get("up", WALL.up_hz)
+        elseif band == "down" then pool = pool_get("down", WALL.down_hz)
+        else pool = pool_get("base", WALL.base_hz) end
+        local loud = band == "down" and WALL.down_gain
+            or band == "up" and WALL.up_gain or WALL.horizontal_gain
+        local p = wall_placement(dist, pool, pan, loud)
+        play_data(render_placements({ p }))
+    end)
+    if not ok then require("ma_speech").log("forward wall error: " .. tostring(err)) end
+end
+
+-- Side-width change cue: a two-tone chirp panned to that side. Wider = up
+-- (520 -> 780 Hz), narrower = down. Deliberately plain first-pass sounds.
+function M.width_cue(side, wider)
+    local a, b = 520, 780
+    if not wider then a, b = 780, 520 end
+    local pan = side * 0.9
+    M.play({
+        { kind = "tone", freq = a, dur = 0.035, pan = pan, vol = 0.3 },
+        { kind = "tone", freq = b, dur = 0.035, at = 0.04, pan = pan, vol = 0.3 },
+    })
+end
+
 function M.play_walls(d)
     local ok, err = pcall(function()
         local placements = {}
