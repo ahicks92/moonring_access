@@ -58,8 +58,7 @@ local buy = {
         local panel = G_stateGame.buyPanel
         local n = #(panel.sortedInventory or {})
         ctx.message:fragment("Buying from " .. vendor_name(panel.vendorRole) .. ", "
-            .. n .. (n == 1 and " item." or " items.")
-            .. " Tab switches panes, Space reads details.")
+            .. n .. (n == 1 and " item." or " items."))
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.buyPanel
@@ -135,8 +134,7 @@ local sell = {
             or (G_Globals.categoryTypes and G_Globals.categoryTypes[panel.categoryIndex]) or "items"
         local n = #(panel.sortedInventory or {})
         ctx.message:fragment("Selling to " .. vendor_name(panel.vendorRole) .. ". "
-            .. tostring(cat) .. ", " .. n .. (n == 1 and " item." or " items.")
-            .. " Left and right change category, Tab switches panes.")
+            .. tostring(cat) .. ", " .. n .. (n == 1 and " item." or " items."))
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.sellPanel
@@ -254,8 +252,7 @@ local character = {
     end,
     announce = function(self, ctx)
         local name = playerStats and playerStats.name or "Character"
-        ctx.message:fragment(clean(name) .. ", character sheet."
-            .. " Tab moves between sections, Escape closes.")
+        ctx.message:fragment(clean(name) .. ", character sheet.")
     end,
     build = function(self, b)
         if not in_game() or not G_stateGame.showCharacterPanel then return end
@@ -285,16 +282,40 @@ local character = {
         end)
 
         b:begin_stop("attributes", "Attributes")
+        -- The game has no stat tooltips; the one explanation it DOES ship is
+        -- each god's stat line on the gods screen ("Strength - suffer fewer
+        -- knockbacks..."). Surface those as the attribute rows' details.
+        local attr_god = {}
+        for _, god in ipairs(G_Globals.skillFactions or {}) do
+            local gd = G_Globals.godData[god]
+            if gd and gd.shortStat then
+                attr_god[gd.shortStat:lower()] = gd
+            end
+        end
         local ATTRS = { "strength", "finesse", "intellect", "perception", "endurance", "luck" }
         for _, a in ipairs(ATTRS) do
             local key = a
-            stat_label(b, "attr_" .. key, function()
+            local function value_text()
                 local v = attrs[key]
                 if key == "luck" and player.powers and (player.powers.luck or 0) > 0 then
                     v = v + G_Globals.luckPowerBonus
                 end
                 return key:sub(1, 1):upper() .. key:sub(2) .. ": " .. tostring(v)
-            end)
+            end
+            local gd = attr_god[key]
+            b:add_item(Id.structural("attr_" .. key), {
+                label = function(ctx)
+                    local ok, s = pcall(value_text)
+                    ctx.message:fragment(ok and s or (key .. " unknown"))
+                end,
+                details = gd and function()
+                    local lines = {}
+                    pcall(function() lines[#lines + 1] = value_text() end)
+                    lines[#lines + 1] = clean(gd.stat)
+                    lines[#lines + 1] = "Improved by devotion to " .. clean(gd.name) .. "."
+                    return lines
+                end or nil,
+            })
         end
 
         b:begin_stop("melee", "Melee")
@@ -443,8 +464,7 @@ local gods = {
         return (tree and tree.isOpen) and "active" or "inactive"
     end,
     announce = function(self, ctx)
-        ctx.message:fragment("Gods. Up and down change god, left and right move along their gifts."
-            .. " Enter on a god dedicates or prays; Enter on a gift buys or uses it.")
+        ctx.message:fragment("Gods.")
     end,
     build = function(self, b)
         local tree = G_stateGame and G_stateGame.skillTree

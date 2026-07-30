@@ -199,14 +199,16 @@ function KeyGraph:move_stop(ctx, step)
             if s.key == cur_node.stop_key then cur_i = i; break end
         end
     end
-    local s = stops[((cur_i - 1 + step) % #stops) + 1]
+    local ti = ((cur_i - 1 + step) % #stops) + 1
+    local s = stops[ti]
 
     local mem = self.state.stop_memory and self.state.stop_memory[s.key]
     local target = (mem and self.current.nodes[mem]) and mem or s.start_key
     local tnode = self.current.nodes[target]
     if not tnode then return false end
 
-    if s.label then ctx.message:fragment(tostring(s.label) .. ".") end
+    if s.label then ctx.message:fragment(tostring(s.label) .. ",") end
+    if #stops > 1 then ctx.message:fragment(ti .. " of " .. #stops .. " tabs.") end
     read_label_of(self, target, ctx)
     local moved = not self.state.cur or self.state.cur.key ~= target
     self.state.cur = tnode.id
