@@ -680,6 +680,32 @@ local function offset_from_player_map_xy(mx, my)
 end
 
 function M.install()
+    -- Monster alerts: the rising "!" when something first sees, hears, or
+    -- smells you. The game plays an "alerted" sound but never says WHO or
+    -- WHERE; sighted players read that off the sprite. showAlert already
+    -- gates on the monster being visible to the player, so speaking it
+    -- leaks nothing. Per-actor cooldown stops burst repeats.
+    hooks.wrap(CActor, "showAlert", function(orig, actor)
+        local before = actor.alertTimer
+        local r = orig(actor)
+        pcall(function()
+            if actor.alertTimer == before then return end   -- guards bailed
+            st.alerted = st.alerted or {}
+            local now = st.frame or 0
+            local last = st.alerted[actor.ID]
+            if last and now - last < 90 then return end
+            st.alerted[actor.ID] = now
+            local p = player()
+            if not p or not p.position or not actor.position then return end
+            local name = "Something"
+            pcall(function() name = actor:getCapitalisedDisplayName() end)
+            local where = require("ma_text").offset(
+                actor.position.x - p.position.x, actor.position.y - p.position.y)
+            speech.say(name .. " alert, " .. where .. ".", false)
+        end)
+        return r
+    end)
+
     hooks.wrap(G_stateGame, "checkForSecretDoorAtMapXYZeroIndexed", function(orig, self, x, y, guaranteed)
         local was_secret = false
         pcall(function()
