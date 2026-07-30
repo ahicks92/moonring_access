@@ -118,6 +118,16 @@ function M.claim(kb)
         end
     end
 
+    -- Ctrl+Tab, any context: exploration cursor jumps to the current target
+    -- and reads it. Eaten whole while Ctrl is down so the game's own target
+    -- cycling never double-fires.
+    if mods.ctrl then
+        if kb.justPressedDictionary["tab"] then
+            push({ kind = "app", action = "cursor_to_target", mods = mods })
+        end
+        eat(kb, "tab")
+    end
+
     -- Review buffers, any context: Ctrl+arrows (arrows only — Ctrl+WASD left
     -- alone). Up/down step lines, left/right switch buffers.
     if mods.ctrl then

@@ -121,7 +121,13 @@ local function describe(x, y, full)
     local occupant = map.creature_at(x, y)
     if occupant then
         local ok, name = pcall(occupant.getDisplayName, occupant)
-        parts[#parts + 1] = ok and name or "creature"
+        local label = ok and name or "creature"
+        if occupant.health and occupant.maxHealth and occupant.maxHealth > 0
+            and not occupant.isPlayer then
+            label = label .. ", " .. math.floor(occupant.health / occupant.maxHealth * 100 + 0.5)
+                .. " percent"
+        end
+        parts[#parts + 1] = label
     end
     for _, tn in ipairs(triggers_at(x, y)) do parts[#parts + 1] = tn end
 

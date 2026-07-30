@@ -211,9 +211,15 @@ local function in_category(f, cat)
 end
 
 local function category_list(cat)
+    -- Features whose backing thing no longer exists (dead/removed: pos()
+    -- returns nil) drop out live — the frozen snapshot freezes ORDER, not
+    -- corpses.
     local out = {}
     for _, f in ipairs(S.feats or {}) do
-        if in_category(f, cat) then out[#out + 1] = f end
+        if in_category(f, cat) then
+            local ok, x = pcall(f.pos)
+            if ok and x then out[#out + 1] = f end
+        end
     end
     return out
 end

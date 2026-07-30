@@ -70,22 +70,22 @@ local POI_ROOTS = {
 
 local POI_RADIUS = 12
 
--- Iterate remembered tiles in a box around the player; cb(x, y, dx, dy, root).
-local function each_remembered_tile(cb)
+-- Iterate tiles in a box around the player; cb(x, y, dx, dy, root).
+-- gate: "visible" (line of sight — Ctrl+H, else it spams every remembered
+-- door in town) or "remembered" (Alt+H terrain survey).
+local function each_gated_tile(gate, cb)
+    local ma_map = require("ma_map")
     local p = player()
     if not p then return end
-    local map = G_stateGame.map
     local px, py = p.position.x, p.position.y
     for dy = -POI_RADIUS, POI_RADIUS do
         for dx = -POI_RADIUS, POI_RADIUS do
             local x, y = px + dx, py + dy
-            local ok, mx, my = pcall(map.convertWorldXYToMapXYZeroIndexed, map, x, y)
-            if ok and mx then
-                local okr, rem = pcall(map.getIsRemembered, map, mx, my)
-                if okr and rem then
-                    local okroot, root = pcall(map.getRootAtMapXYZeroIndexed, map, mx, my)
-                    cb(x, y, dx, dy, okroot and root or nil)
-                end
+            local pass
+            if gate == "visible" then pass = ma_map.visible(x, y)
+            else pass = ma_map.remembered(x, y) end
+            if pass then
+                cb(x, y, dx, dy, ma_map.root(x, y))
             end
         end
     end
@@ -119,7 +119,7 @@ end
 -- nearest first.
 local function announce_pois()
     local found = {}
-    each_remembered_tile(function(x, y, dx, dy, root)
+    each_gated_tile("visible", function(x, y, dx, dy, root)
         if root and POI_ROOTS[root] then
             found[#found + 1] = { d = text.dist(dx, dy),
                 s = root_name(root) .. ", " .. text.offset(dx, dy) }
@@ -164,7 +164,7 @@ local BORING_ROOTS = {
 -- Alt+H: distinct terrain in range, grouped by kind, nearest instance + count.
 local function announce_terrain()
     local groups = {}
-    each_remembered_tile(function(x, y, dx, dy, root)
+    each_gated_tile("remembered", function(x, y, dx, dy, root)
         if root and not BORING_ROOTS[root] then
             local g = groups[root]
             local d = text.dist(dx, dy)
@@ -469,6 +469,15 @@ local ACTIONS = {
     secrets = announce_secrets,
     cursor_step = function(cmd) require("ma_cursor").step(cmd.dir, cmd.skip) end,
     cursor_read = function() require("ma_cursor").read() end,
+    cursor_to_target = function()
+        local p = player()
+        local t = p and p.target
+        if t and t.position and not t.isDead then
+            require("ma_cursor").jump_to(t.position.x, t.position.y)
+        else
+            speech.say("No target.", true)
+        end
+    end,
     cursor_recenter = function() require("ma_cursor").recenter() end,
     scan_entry = function(cmd) require("ma_scanner").step_entry(cmd.dir) end,
     scan_cat = function(cmd) require("ma_scanner").step_category(cmd.dir) end,
