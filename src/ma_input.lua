@@ -81,13 +81,43 @@ function M.claim(kb)
         alt = (kb.currentKeyPressDictionary["lalt"] or kb.currentKeyPressDictionary["ralt"]) and true or false,
     }
 
-    if dispatcher.engaged() then
-        for dir, keys in pairs(DIR_KEYS) do
-            local hit = false
-            for _, k in ipairs(keys) do
-                if kb.justPressedDictionary[k] then hit = true end
+    -- GLOBAL Ctrl claims run FIRST: the review buffers and the cursor's
+    -- target jump work in every context, and the overlay block below eats
+    -- arrows unconditionally — if it ran first, Ctrl+arrow presses would be
+    -- consumed before these checks could see them.
+    if mods.ctrl then
+        -- Ctrl+Tab: exploration cursor jumps to the current target. Eaten
+        -- whole while Ctrl is down so the game's target cycling never fires.
+        if kb.justPressedDictionary["tab"] then
+            push({ kind = "app", action = "cursor_to_target", mods = mods })
+        end
+        eat(kb, "tab")
+        -- Review buffers: Ctrl+arrows (arrows only — Ctrl+WASD left alone).
+        -- Up/down step lines, left/right switch buffers. Eaten every tick so
+        -- the game's auto-repeat never walks the player.
+        for _, arrow in ipairs({ "up", "down", "left", "right" }) do
+            if kb.justPressedDictionary[arrow] then
+                if arrow == "up" or arrow == "down" then
+                    push({ kind = "app", action = "buffer_step", dir = arrow, mods = mods })
+                else
+                    push({ kind = "app", action = "buffer_switch", dir = arrow, mods = mods })
+                end
             end
-            if hit then push({ kind = "move", dir = dir, mods = mods }) end
+            eat(kb, arrow)
+        end
+    end
+
+    if dispatcher.engaged() then
+        -- Ctrl+arrows belong to the review buffers (already claimed above)
+        -- even while an overlay captures.
+        if not mods.ctrl then
+            for dir, keys in pairs(DIR_KEYS) do
+                local hit = false
+                for _, k in ipairs(keys) do
+                    if kb.justPressedDictionary[k] then hit = true end
+                end
+                if hit then push({ kind = "move", dir = dir, mods = mods }) end
+            end
         end
         for _, k in ipairs(CONFIRM_KEYS) do
             if kb.justPressedDictionary[k] then
@@ -97,6 +127,11 @@ function M.claim(kb)
         end
         if kb.justPressedDictionary["space"] then
             push({ kind = "read_info", mods = mods })
+        end
+        -- Tab/Shift+Tab cycle the overlay's Tab-stops (Ctrl+Tab stays the
+        -- exploration cursor's target jump, handled below).
+        if kb.justPressedDictionary["tab"] and not mods.ctrl then
+            push({ kind = "stop_move", dir = mods.shift and "left" or "right", mods = mods })
         end
         if extra["home"] then push({ kind = "move_to_edge", dir = "left", mods = mods }) end
         if extra["end"] then push({ kind = "move_to_edge", dir = "right", mods = mods }) end
@@ -108,6 +143,7 @@ function M.claim(kb)
         end
         for _, k in ipairs(CONFIRM_KEYS) do eat(kb, k) end
         eat(kb, "space")
+        eat(kb, "tab")   -- the game's target cycling must not fire under overlays
         -- Escape belongs to the game EXCEPT over our own mod screens, which
         -- have no game widget behind them to close.
         if require("ma_hooks").state.tuning_open then
@@ -115,34 +151,6 @@ function M.claim(kb)
                 push({ kind = "app", action = "tune_toggle", mods = mods })
             end
             eat(kb, "escape")
-        end
-    end
-
-    -- Ctrl+Tab, any context: exploration cursor jumps to the current target
-    -- and reads it. Eaten whole while Ctrl is down so the game's own target
-    -- cycling never double-fires.
-    if mods.ctrl then
-        if kb.justPressedDictionary["tab"] then
-            push({ kind = "app", action = "cursor_to_target", mods = mods })
-        end
-        eat(kb, "tab")
-    end
-
-    -- Review buffers, any context: Ctrl+arrows (arrows only — Ctrl+WASD left
-    -- alone). Up/down step lines, left/right switch buffers.
-    if mods.ctrl then
-        for _, arrow in ipairs({ "up", "down", "left", "right" }) do
-            if kb.justPressedDictionary[arrow] then
-                if arrow == "up" or arrow == "down" then
-                    push({ kind = "app", action = "buffer_step", dir = arrow, mods = mods })
-                else
-                    push({ kind = "app", action = "buffer_switch", dir = arrow, mods = mods })
-                end
-            end
-            -- Eat held state EVERY tick while Ctrl is down, not just on the
-            -- press edge — otherwise the game's 10-tick auto-repeat sees the
-            -- held arrow and walks the player.
-            eat(kb, arrow)
         end
     end
 

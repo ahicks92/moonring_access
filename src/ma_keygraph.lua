@@ -39,7 +39,9 @@ function KeyGraph.new(render_cb, state)
 end
 
 -- The down-right total order: go right until stuck (recording each node),
--- queue every down for a later pass, repeat. Returns a list of keys.
+-- queue every down for a later pass, repeat. Returns a list of keys. Nodes
+-- the walk can't reach (later Tab-stops have no cross-stop edges) append in
+-- declaration order, so focus recovery still spans the whole render.
 function KeyGraph.compute_order(render)
     local order, seen, fringe = {}, {}, { render.start_key }
     local i = 1
@@ -57,6 +59,12 @@ function KeyGraph.compute_order(render)
             k = r.to
         end
         i = i + 1
+    end
+    for _, k in ipairs(render.decl_order or {}) do
+        if not seen[k] then
+            seen[k] = true
+            order[#order + 1] = k
+        end
     end
     return order
 end
@@ -132,6 +140,17 @@ local function read_label_of(self, key, ctx)
     if node and node.vtable.label then node.vtable.label(ctx) end
 end
 
+-- Remember where focus sits inside its Tab-stop, so Tab returns there.
+-- Called after every operation that may have moved focus.
+local function note_stop_memory(self)
+    local cur = self.state.cur
+    local node = cur and self.current and self.current.nodes[cur.key]
+    if node and node.stop_key then
+        self.state.stop_memory = self.state.stop_memory or {}
+        self.state.stop_memory[node.stop_key] = cur.key
+    end
+end
+
 -- Append the focused control's label to the message (re-renders first).
 function KeyGraph:read_current_label(ctx)
     if not self:rerender(ctx) then return end
@@ -157,7 +176,42 @@ function KeyGraph:move(ctx, dir)
     if t.label then t.label(ctx) end
     if new_node.vtable.label then new_node.vtable.label(ctx) end
     self.state.cur = new_node.id
+    note_stop_memory(self)
     return true
+end
+
+-- Tab/Shift+Tab: cycle Tab-stops in declaration order (wrapping). Lands on
+-- the stop's remembered position, else its first node; speaks the stop label
+-- then the landing control. With no declared stops, re-reads the current
+-- label so the key never feels dropped.
+function KeyGraph:move_stop(ctx, step)
+    if not self:rerender(ctx) then return false end
+    local stops = self.current.stops
+    if not stops or #stops == 0 then
+        read_label_of(self, self.state.cur and self.state.cur.key, ctx)
+        return false
+    end
+
+    local cur_node = self.state.cur and self.current.nodes[self.state.cur.key]
+    local cur_i = 1
+    if cur_node and cur_node.stop_key then
+        for i, s in ipairs(stops) do
+            if s.key == cur_node.stop_key then cur_i = i; break end
+        end
+    end
+    local s = stops[((cur_i - 1 + step) % #stops) + 1]
+
+    local mem = self.state.stop_memory and self.state.stop_memory[s.key]
+    local target = (mem and self.current.nodes[mem]) and mem or s.start_key
+    local tnode = self.current.nodes[target]
+    if not tnode then return false end
+
+    if s.label then ctx.message:fragment(tostring(s.label) .. ".") end
+    read_label_of(self, target, ctx)
+    local moved = not self.state.cur or self.state.cur.key ~= target
+    self.state.cur = tnode.id
+    note_stop_memory(self)
+    return moved
 end
 
 -- Home/End: the INNERMOST structure wins (Brad) — inside a multi-item row,
@@ -178,6 +232,16 @@ function KeyGraph:move_to_edge(ctx, dir)
     else
         local order = self.state.key_order
         if not order or #order == 0 then order = KeyGraph.compute_order(self.current) end
+        -- Inside a Tab-stop, Home/End clamp to the stop's own nodes: like
+        -- arrows, they never cross a stop boundary.
+        if node.stop_key then
+            local scoped = {}
+            for _, k in ipairs(order) do
+                local n = self.current.nodes[k]
+                if n and n.stop_key == node.stop_key then scoped[#scoped + 1] = k end
+            end
+            if #scoped > 0 then order = scoped end
+        end
         target = (dir == "left") and order[1] or order[#order]
     end
     local tnode = target and self.current.nodes[target]
@@ -188,6 +252,7 @@ function KeyGraph:move_to_edge(ctx, dir)
     local moved = target ~= cur
     self.state.cur = tnode.id
     read_label_of(self, target, ctx)
+    note_stop_memory(self)
     return moved
 end
 
@@ -220,6 +285,10 @@ end
 -- Invoke a named vtable action slot ("on_read_info", ...) on the focused
 -- control; falls back to re-reading the label so the key never feels dropped.
 -- Returns true when a real action ran (false = label fallback).
+--
+-- read_info default: a control with a `details` producer (the tooltip-buffer
+-- lines) but no bespoke on_read_info gets read-it-all for free — the SAME
+-- lines the buffer steps through, joined. One builder, both interactions.
 function KeyGraph:invoke_node_action(ctx, slot)
     if not self:rerender(ctx) then return false end
     local node = self.state.cur and self.current.nodes[self.state.cur.key]
@@ -228,6 +297,13 @@ function KeyGraph:invoke_node_action(ctx, slot)
     if action then
         action(ctx)
         return true
+    end
+    if slot == "on_read_info" and node.vtable.details then
+        local ok, lines = pcall(node.vtable.details)
+        if ok and type(lines) == "table" and #lines > 0 then
+            ctx.message:fragment(table.concat(lines, ". "))
+            return true
+        end
     end
     if node.vtable.label then node.vtable.label(ctx) end
     return false

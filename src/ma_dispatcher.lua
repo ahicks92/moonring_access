@@ -60,6 +60,12 @@ function D.engaged()
     return D._captures or D._pending
 end
 
+-- The id of the overlay that drove the last tick (nil = none). Used by the
+-- pump to unbind the tooltip buffer when every overlay is gone.
+function D.active_id()
+    return D.active_last
+end
+
 local function find_active()
     for i = #D.overlays, 1, -1 do
         local o = D.overlays[i]
@@ -77,9 +83,16 @@ local function render_cb_for(overlay)
     end
 end
 
-local function cur_deferred(graph, state)
+-- Focus side-channel carried on every result: the focused node's backing
+-- object + structural key (tooltip-buffer binding identity) and its optional
+-- deferred/details producers.
+local function focus_fields(graph, state, res)
     local node = state.cur and graph.current and graph.current.nodes[state.cur.key]
-    return node and node.vtable.deferred or nil
+    res.focus_ref = state.cur and state.cur.ref
+    res.focus_key = state.cur and state.cur.key
+    res.deferred = node and node.vtable.deferred or nil
+    res.details = node and node.vtable.details or nil
+    return res
 end
 
 local function apply_nav(graph, state, ctx, message, command)
@@ -88,15 +101,22 @@ local function apply_nav(graph, state, ctx, message, command)
     local slot = NODE_ACTIONS[kind]
     if slot then
         local acted = graph:invoke_node_action(ctx, slot)
-        return { message = message:build(), focus_ref = state.cur and state.cur.ref,
-            spoke_label = not acted, deferred = cur_deferred(graph, state) }
+        return focus_fields(graph, state,
+            { message = message:build(), spoke_label = not acted })
     end
 
     if kind == "confirm" then
         local acted = graph:click(ctx, command.mods)
         D.last_spoken = state.cur and state.cur.key
-        return { message = message:build(), focus_ref = state.cur and state.cur.ref,
-            clicked = true, spoke_label = not acted, deferred = cur_deferred(graph, state) }
+        return focus_fields(graph, state,
+            { message = message:build(), clicked = true, spoke_label = not acted })
+    end
+
+    if kind == "stop_move" then
+        local moved = graph:move_stop(ctx, command.dir == "right" and 1 or -1)
+        D.last_spoken = state.cur and state.cur.key
+        return focus_fields(graph, state,
+            { message = message:build(), moved = moved, spoke_label = true })
     end
 
     -- A value control (a slider) intercepts horizontal input to adjust instead
@@ -114,8 +134,8 @@ local function apply_nav(graph, state, ctx, message, command)
         moved = graph:move(ctx, dir)
     end
     D.last_spoken = state.cur and state.cur.key
-    return { message = message:build(), focus_ref = state.cur and state.cur.ref,
-        moved = moved, spoke_label = true, deferred = cur_deferred(graph, state) }
+    return focus_fields(graph, state,
+        { message = message:build(), moved = moved, spoke_label = true })
 end
 
 local function build_and_process(overlay, command)
@@ -166,8 +186,8 @@ local function build_and_process(overlay, command)
     if fresh and overlay.announce then pcall(overlay.announce, overlay, ctx) end
     local node = graph.current.nodes[cur.key]
     if node and node.vtable.label then node.vtable.label(ctx) end
-    return { message = message:build(), focus_ref = cur.ref, entered = true,
-        spoke_label = true, deferred = node and node.vtable.deferred or nil }
+    return focus_fields(graph, state,
+        { message = message:build(), entered = true, spoke_label = true })
 end
 
 -- Run one frame, optionally applying a player navigation command:

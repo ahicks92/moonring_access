@@ -233,18 +233,24 @@ end)
 
 -- Number box: sub-identity includes the value, so left/right adjustments
 -- (handled by the game) re-announce automatically.
+-- The game names this widget numberInputBox on G_stateGame but numberBox on
+-- the title screen; check both.
+local function number_widget()
+    return widget("numberInputBox") or widget("numberBox")
+end
+
 local number_box = {
     id = "number_box",
     handler = function(self)
-        local box = widget("numberBox")
+        local box = number_widget()
         return (box and box.isOpen) and "active" or "inactive"
     end,
     sub_identity = function(self)
-        local box = widget("numberBox")
+        local box = number_widget()
         return box and (tostring(box.bodyText) .. "=" .. tostring(box.number)) or nil
     end,
     build = function(self, b)
-        local box = widget("numberBox")
+        local box = number_widget()
         if not box or not box.isOpen then return end
         b:add_label(Id.structural("number"), function(ctx)
             ctx.message:fragment(clean(box.bodyText))
@@ -313,9 +319,10 @@ local inventory = {
                     panel:selectItemUnderCursor()
                 end,
                 on_horizontal_adjust = category_adjust,
-                on_read_info = function(ctx)
-                    local ok, desc = pcall(G_stateGame.getModifiedObjectDescription, G_stateGame, item)
-                    ctx.message:fragment(ok and clean(desc) or "No description.")
+                -- Space reads all of these joined; Ctrl+Up/Down step them in
+                -- the Details buffer. One producer, both interactions.
+                details = function()
+                    return require("ma_items").object_lines(item, { mode = "inventory" })
                 end,
             })
             b:end_row()
@@ -579,6 +586,9 @@ function M.register_all()
     dispatcher.register(top_menu)
     dispatcher.register(notes)
     dispatcher.register(inventory)
+    -- Character sheet, shops, gods — below the modal stack so multi-choice /
+    -- confirm / number box / alerts opened FROM them win the screen.
+    require("ma_screens").register()
     dispatcher.register(multi_choice)
     dispatcher.register(confirm)
     dispatcher.register(number_box)

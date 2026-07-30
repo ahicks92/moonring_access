@@ -24,8 +24,10 @@ local MODULES = {
     { name = "ma_keygraph",    file = "Mods/MoonringAccess/ma_keygraph.lua" },
     { name = "ma_dispatcher",  file = "Mods/MoonringAccess/ma_dispatcher.lua" },
     { name = "ma_input",       file = "Mods/MoonringAccess/ma_input.lua" },
+    { name = "ma_screens",     file = "Mods/MoonringAccess/ma_screens.lua" },
     { name = "ma_overlays",    file = "Mods/MoonringAccess/ma_overlays.lua" },
     { name = "ma_map",         file = "Mods/MoonringAccess/ma_map.lua" },
+    { name = "ma_items",       file = "Mods/MoonringAccess/ma_items.lua" },
     { name = "ma_synth",       file = "Mods/MoonringAccess/ma_synth.lua" },
     { name = "ma_shapes",      file = "Mods/MoonringAccess/ma_shapes.lua" },
     { name = "ma_cursor",      file = "Mods/MoonringAccess/ma_cursor.lua" },
@@ -88,19 +90,31 @@ function M.pump(dt)
     local dispatcher = require("ma_dispatcher")
     local speech = require("ma_speech")
     local app = require("ma_app")
+    local buffers = require("ma_buffers")
+
+    -- Speak a dispatcher result and bind the tooltip buffer to the focused
+    -- control (its `details` producer), so Ctrl+Up/Down break the focused
+    -- thing down line by line wherever details exist.
+    local function realize_overlay(r)
+        if not r then return end
+        if r.message then speech.say(r.message, true) end
+        if r.focus_key then
+            buffers.bind_details(r.focus_ref or r.focus_key, r.details)
+        end
+    end
+
     for _, cmd in ipairs(input.drain()) do
         if cmd.kind == "app" then
             app.dispatch(cmd)
         else
-            local r = dispatcher.tick(cmd)
-            if r and r.message then speech.say(r.message, true) end
+            realize_overlay(dispatcher.tick(cmd))
         end
     end
 
     -- Idle tick: announces fresh opens, sub-identity swaps, and focus
     -- reconciliation jumps even when no key was pressed.
-    local r = dispatcher.tick(nil)
-    if r and r.message then speech.say(r.message, true) end
+    realize_overlay(dispatcher.tick(nil))
+    if not dispatcher.active_id() then buffers.unbind_details() end
 
     -- Game-log lines captured this frame, coalesced into one non-interrupting
     -- utterance, then the tile watcher (which follows the same turn's prose).

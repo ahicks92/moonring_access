@@ -152,3 +152,15 @@ name = "ma_talk"
 source = "ma_target.lua"
 before = "main.lua"
 name = "ma_target"
+
+[[patches]]
+[patches.module]
+source = "ma_items.lua"
+before = "main.lua"
+name = "ma_items"
+
+[[patches]]
+[patches.module]
+source = "ma_screens.lua"
+before = "main.lua"
+name = "ma_screens"
