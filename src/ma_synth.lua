@@ -351,33 +351,58 @@ local function wall_placement(dist, pool, pan, loudness)
     }
 end
 
--- One forward wall ping with an explicit pan (the movement-direction echo).
--- band: "base" (east/west pitch), "up", "down". Distance still drives onset
--- delay and gain by the same adjacent-referenced law.
-function M.play_wall_forward(band, dist, pan)
+-- One forward wall ping in the movement direction. Four fixed direction
+-- identities (walls speak NOISE; tones belong to the width/cursor language):
+--   west  = single ping, base band, hard LEFT (always)
+--   east  = single ping, base band, hard RIGHT (always)
+--   north = rising pair (base then fifth up), centered
+--   south = falling pair (base then fifth down), centered
+-- Distance drives onset delay and gain by the same adjacent-referenced law;
+-- pairs start at the distance delay with a short internal gap.
+local PAIR_GAP = 0.05
+
+function M.play_wall_forward(dir, dist)
     local ok, err = pcall(function()
-        local pool
-        if band == "up" then pool = pool_get("up", WALL.up_hz)
-        elseif band == "down" then pool = pool_get("down", WALL.down_hz)
-        else pool = pool_get("base", WALL.base_hz) end
-        local loud = band == "down" and WALL.down_gain
-            or band == "up" and WALL.up_gain or WALL.horizontal_gain
-        local p = wall_placement(dist, pool, pan, loud)
-        play_data(render_placements({ p }))
+        local placements = {}
+        if dir == "west" or dir == "east" then
+            local pan = dir == "west" and -1 or 1
+            placements[1] = wall_placement(dist, pool_get("base", WALL.base_hz),
+                pan, WALL.horizontal_gain)
+        else
+            local second_pool, second_gain
+            if dir == "north" then
+                second_pool, second_gain = pool_get("up", WALL.up_hz), WALL.up_gain
+            else
+                second_pool, second_gain = pool_get("down", WALL.down_hz), WALL.down_gain
+            end
+            placements[1] = wall_placement(dist, pool_get("base", WALL.base_hz),
+                0, WALL.horizontal_gain)
+            local p2 = wall_placement(dist, second_pool, 0, second_gain)
+            p2.start = p2.start + PAIR_GAP
+            placements[2] = p2
+        end
+        play_data(render_placements(placements))
     end)
     if not ok then require("ma_speech").log("forward wall error: " .. tostring(err)) end
 end
 
 -- Side-width change cue: a two-tone chirp panned to that side. Wider = up
--- (520 -> 780 Hz), narrower = down. Deliberately plain first-pass sounds.
+-- (520 -> 780 Hz), gentle. Narrower = down with a WIDER drop and more level:
+-- walls closing in is a warning, walls opening is an invitation, and the two
+-- must not be mistakable for each other at speed. Plain first-pass sounds.
 function M.width_cue(side, wider)
-    local a, b = 520, 780
-    if not wider then a, b = 780, 520 end
     local pan = side * 0.9
-    M.play({
-        { kind = "tone", freq = a, dur = 0.035, pan = pan, vol = 0.3 },
-        { kind = "tone", freq = b, dur = 0.035, at = 0.04, pan = pan, vol = 0.3 },
-    })
+    if wider then
+        M.play({
+            { kind = "tone", freq = 520, dur = 0.035, pan = pan, vol = 0.28 },
+            { kind = "tone", freq = 780, dur = 0.035, at = 0.04, pan = pan, vol = 0.28 },
+        })
+    else
+        M.play({
+            { kind = "tone", freq = 780, dur = 0.04, pan = pan, vol = 0.38 },
+            { kind = "tone", freq = 390, dur = 0.05, at = 0.045, pan = pan, vol = 0.38 },
+        })
+    end
 end
 
 function M.play_walls(d)

@@ -60,15 +60,13 @@ function M.on_move(dx, dy)
     if not p or not p.position then return end
     local px, py = p.position.x, p.position.y
 
-    -- Forward ping.
+    -- Forward ping: fixed compass identities (west always left, east always
+    -- right, north a rising pair, south a falling pair).
     local d = wall_distance(px, py, dx, dy)
     if d then
-        if dy ~= 0 then
-            synth.play_wall_forward(dy < 0 and "up" or "down", d, 0)
-        else
-            local mag = math.min(1, math.max(0, (d - 1) / (MAX_DIST - 1)))
-            synth.play_wall_forward("base", d, (dx < 0 and -1 or 1) * mag)
-        end
+        local dir = dy < 0 and "north" or dy > 0 and "south"
+            or dx < 0 and "west" or "east"
+        synth.play_wall_forward(dir, d)
     end
 
     -- Side widths, perpendicular to heading. left = heading rotated CCW in
