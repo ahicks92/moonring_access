@@ -173,7 +173,10 @@ function KeyGraph:move(ctx, dir)
         return false
     end
 
-    if t.label then t.label(ctx) end
+    if t.label then
+        t.label(ctx)
+        ctx.message:sentence()   -- row/lane announcement, then the landing label
+    end
     if new_node.vtable.label then new_node.vtable.label(ctx) end
     self.state.cur = new_node.id
     note_stop_memory(self)
@@ -207,8 +210,9 @@ function KeyGraph:move_stop(ctx, step)
     local tnode = self.current.nodes[target]
     if not tnode then return false end
 
-    if s.label then ctx.message:fragment(tostring(s.label) .. ",") end
-    if #stops > 1 then ctx.message:fragment(ti .. " of " .. #stops .. " tabs.") end
+    if s.label then ctx.message:fragment(tostring(s.label)) end
+    if #stops > 1 then ctx.message:list_item(ti .. " of " .. #stops .. " tabs") end
+    ctx.message:sentence()
     read_label_of(self, target, ctx)
     local moved = not self.state.cur or self.state.cur.key ~= target
     self.state.cur = tnode.id
@@ -303,7 +307,9 @@ function KeyGraph:invoke_node_action(ctx, slot)
     if slot == "on_read_info" and node.vtable.details then
         local ok, lines = pcall(node.vtable.details)
         if ok and type(lines) == "table" and #lines > 0 then
-            ctx.message:fragment(table.concat(lines, ". "))
+            for _, line in ipairs(lines) do
+                ctx.message:sentence(tostring(line))
+            end
             return true
         end
     end

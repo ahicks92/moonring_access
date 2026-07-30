@@ -188,9 +188,9 @@ function M.tile_things(x, y)
             elseif a == "warp" then mods[#mods + 1] = "passage"
             elseif not SKIP_ACTIONS[a] then mods[#mods + 1] = a end
         end
-        local name = base
-        if #mods > 0 then name = name .. ", " .. table.concat(mods, ", ") end
-        return { name }, true
+        local m = require("ma_mb").new():list_item(base)
+        for _, mod in ipairs(mods) do m:list_item(mod) end
+        return { m:build() }, true
     end
     local names = {}
     for _, a in ipairs(actions) do

@@ -13,6 +13,7 @@ local hooks = require("ma_hooks")
 local speech = require("ma_speech")
 local text = require("ma_text")
 local buffers = require("ma_buffers")
+local MB = require("ma_mb")
 
 local st = hooks.state
 st.talk = st.talk or {}
@@ -49,7 +50,8 @@ function M.install()
             pcall(function()
                 if fresh then
                     local who = text.clean(display_name or name or "someone")
-                    speech.say("Talking to " .. who .. ". Type words, tab completes, enter says.", true)
+                    speech.say(MB.new():fragment("Talking to"):fragment(who)
+                        :sentence("Type words, tab completes, enter says"), true)
                     buffers.add("conversation", "--- " .. who .. " ---")
                 end
             end)
@@ -62,7 +64,7 @@ function M.install()
                 local word = (self.currentTypedTag ~= "" and self.currentTypedTag) or self.string
                 if word and word ~= "" then
                     local clean = text.clean(word)
-                    speech.say("You say " .. clean .. ".", false)
+                    speech.say(MB.new():fragment("You say"):fragment(clean), false)
                     buffers.add("conversation", "You: " .. clean)
                 end
             end)
@@ -111,12 +113,12 @@ end
 function M.status()
     local a = area()
     if not a or not a.isOpen then return end
-    local parts = {}
+    local m = MB.new()
     if a.string and a.string ~= "" then
-        parts[#parts + 1] = "Typed: " .. text.clean(a.string)
+        m:sentence("Typed: " .. text.clean(a.string))
     end
     if a.currentTypedTag and a.currentTypedTag ~= "" then
-        parts[#parts + 1] = "suggests " .. text.clean(a.currentTypedTag)
+        m:sentence("suggests " .. text.clean(a.currentTypedTag))
     end
     -- The visual cloud shows ONE word at a time from the seen-but-unused
     -- rotation; read the whole rotation instead (same state, not time-
@@ -124,10 +126,11 @@ function M.status()
     -- must be learned elsewhere and typed in full, same as for everyone.
     local ok, words = pcall(a.getUnusedKeys, a)
     if ok and type(words) == "table" and #words > 0 then
-        parts[#parts + 1] = "You could ask about: " .. table.concat(words, ", ")
+        m:sentence("You could ask about:")
+        for _, w in ipairs(words) do m:list_item(w) end
     end
-    if #parts == 0 then parts[1] = "Nothing typed, and nothing unasked from this speaker." end
-    speech.say(table.concat(parts, ". ") .. ".", true)
+    if m:is_empty() then m:fragment("Nothing typed, and nothing unasked from this speaker") end
+    speech.say(m, true)
 end
 
 return M

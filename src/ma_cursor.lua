@@ -17,6 +17,7 @@ local text = require("ma_text")
 local map = require("ma_map")
 local shapes = require("ma_shapes")
 local synth = require("ma_synth")
+local MB = require("ma_mb")
 
 local st = hooks.state
 st.cursor = st.cursor or {}
@@ -102,18 +103,18 @@ local function play_tile_cues(x, y)
     end
 end
 
--- Describe the tile into parts. full=true reads everything; differential
--- reads only changes vs C.last_* plus occupants/triggers.
-local function describe(x, y, full)
-    local parts = {}
+-- Describe the tile into the passed builder as comma-separated list items.
+-- full=true reads everything; differential reads only changes vs C.last_*
+-- plus occupants/triggers.
+local function describe(m, x, y, full)
     local vis = vis_class(x, y)
 
     if vis == "unexplored" then
-        if full or C.last_vis ~= "unexplored" then parts[#parts + 1] = "unexplored" end
+        if full or C.last_vis ~= "unexplored" then m:list_item("unexplored") end
         C.last_vis = "unexplored"
         C.last_root = nil
         C.last_shape = nil
-        return parts
+        return
     end
 
     -- Object tiles merge root + triggers into one name ("Chest (locked)");
@@ -123,42 +124,39 @@ local function describe(x, y, full)
     local things, merged = map.tile_things(x, y)
     local shape_text, shape_key = map.path_shape_text(x, y)
     if full or root ~= C.last_root or shape_key ~= C.last_pathkey then
-        if merged then parts[#parts + 1] = things[1]
-        elseif shape_text then parts[#parts + 1] = shape_text
-        else parts[#parts + 1] = map.root_name(root) end
+        if merged then m:list_item(things[1])
+        elseif shape_text then m:list_item(shape_text)
+        else m:list_item(map.root_name(root)) end
     end
     C.last_root = root
     C.last_pathkey = shape_key
 
     local occupant = map.creature_at(x, y)
     if occupant then
-        local label
         if occupant.isPlayer then
-            label = "you"   -- the overworld player actor has no display name
+            m:list_item("you")   -- the overworld player actor has no display name
         else
             local ok, name = pcall(occupant.getDisplayName, occupant)
-            label = ok and name or "creature"
+            m:list_item(ok and name or "creature")
+            if occupant.health and occupant.maxHealth and occupant.maxHealth > 0 then
+                m:list_item(math.floor(occupant.health / occupant.maxHealth * 100 + 0.5)
+                    .. " percent")
+            end
         end
-        if occupant and occupant.health and occupant.maxHealth and occupant.maxHealth > 0
-            and not occupant.isPlayer then
-            label = label .. ", " .. math.floor(occupant.health / occupant.maxHealth * 100 + 0.5)
-                .. " percent"
-        end
-        parts[#parts + 1] = label
     end
     if not merged then
-        for _, tn in ipairs(things) do parts[#parts + 1] = tn end
+        for _, tn in ipairs(things) do m:list_item(tn) end
     end
 
     -- Landmark tier, always spoken: standing on a walkable boundary tile
     -- means stepping outward here leaves the area.
     local exit_edge = map.area_exit_edge_at(x, y)
-    if exit_edge then parts[#parts + 1] = "area exit " .. exit_edge end
+    if exit_edge then m:list_item("area exit " .. exit_edge) end
 
     -- Overworld icons (herbs, berries, kindling, prints, ripples) at the
     -- cursor tile — arrowing the world map reads what the icons show.
     for _, n in ipairs(map.overworld_icons_at(x, y)) do
-        parts[#parts + 1] = n
+        m:list_item(n)
     end
 
     -- Shape vocabulary (hallway/corner/dead end) only makes sense on a tile
@@ -180,22 +178,13 @@ local function describe(x, y, full)
     else
         shape = shape_at(x, y)
     end
-    if shape and (full or shape ~= C.last_shape) then parts[#parts + 1] = shape end
+    if shape and (full or shape ~= C.last_shape) then m:list_item(shape) end
     C.last_shape = shape
 
     if vis == "blurred" and (full or C.last_vis ~= "blurred") then
-        parts[#parts + 1] = "blurred"
+        m:list_item("blurred")
     end
     C.last_vis = vis
-
-    return parts
-end
-
-local function speak_parts(parts, prefix)
-    local out = {}
-    if prefix then out[#out + 1] = prefix end
-    for _, p in ipairs(parts) do out[#out + 1] = p end
-    if #out > 0 then speech.say(table.concat(out, ", ") .. ".", true) end
 end
 
 function M.step(dir, skip)
@@ -217,7 +206,9 @@ function M.step(dir, skip)
             return
         end
         play_tile_cues(C.x, C.y)
-        speak_parts(describe(C.x, C.y, false))
+        local m = MB.new()
+        describe(m, C.x, C.y, false)
+        speech.say(m, true)
         return
     end
 
@@ -235,15 +226,19 @@ function M.step(dir, skip)
         end
     end
     play_tile_cues(C.x, C.y)
-    speak_parts(describe(C.x, C.y, true), "skipped " .. steps)
+    local m = MB.new():list_item("skipped " .. steps)
+    describe(m, C.x, C.y, true)
+    speech.say(m, true)
 end
 
 function M.read()
     if not ensure() then return end
     local px, py = player_pos()
-    local prefix = px and text.offset(C.x - px, C.y - py) or nil
     play_tile_cues(C.x, C.y)
-    speak_parts(describe(C.x, C.y, true), prefix)
+    local m = MB.new()
+    if px then m:list_item(text.offset(C.x - px, C.y - py)) end
+    describe(m, C.x, C.y, true)
+    speech.say(m, true)
 end
 
 function M.recenter(silent)
@@ -252,8 +247,9 @@ function M.recenter(silent)
     C.x, C.y = px, py
     C.last_root, C.last_shape, C.last_vis = nil, nil, nil
     if not silent then
-        speech.say("Cursor on you.", true)
-        speak_parts(describe(C.x, C.y, true))
+        local m = MB.new():fragment("Cursor on you"):sentence()
+        describe(m, C.x, C.y, true)
+        speech.say(m, true)
     end
 end
 

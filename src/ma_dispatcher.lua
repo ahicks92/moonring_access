@@ -25,7 +25,9 @@
 -- same-frame nav command).
 --
 -- tick(command) returns nil or a result table:
---   { message = <string?>, focus_ref = <backing object?>, moved/clicked/entered }
+--   { message = <MessageBuilder?>, focus_ref = <backing object?>,
+--     moved/clicked/entered } — the caller hands message to speech.say, which
+--   builds it (an empty builder speaks nothing).
 
 local KeyGraph = require("ma_keygraph")
 local Builder = require("ma_graph")
@@ -106,21 +108,21 @@ local function apply_nav(graph, state, ctx, message, command)
     if slot then
         local acted = graph:invoke_node_action(ctx, slot)
         return focus_fields(graph, state,
-            { message = message:build(), spoke_label = not acted })
+            { message = message, spoke_label = not acted })
     end
 
     if kind == "confirm" then
         local acted = graph:click(ctx, command.mods)
         D.last_spoken = state.cur and state.cur.key
         return focus_fields(graph, state,
-            { message = message:build(), clicked = true, spoke_label = not acted })
+            { message = message, clicked = true, spoke_label = not acted })
     end
 
     if kind == "stop_move" then
         local moved = graph:move_stop(ctx, command.dir == "right" and 1 or -1)
         D.last_spoken = state.cur and state.cur.key
         return focus_fields(graph, state,
-            { message = message:build(), moved = moved, spoke_label = true })
+            { message = message, moved = moved, spoke_label = true })
     end
 
     -- A value control (a slider) intercepts horizontal input to adjust instead
@@ -128,7 +130,7 @@ local function apply_nav(graph, state, ctx, message, command)
     local dir = command.dir
     if (dir == "left" or dir == "right")
         and graph:try_horizontal_adjust(ctx, dir == "right" and 1 or -1, kind == "move_to_edge") then
-        return { message = message:build() }
+        return { message = message }
     end
 
     local moved
@@ -139,7 +141,7 @@ local function apply_nav(graph, state, ctx, message, command)
     end
     D.last_spoken = state.cur and state.cur.key
     return focus_fields(graph, state,
-        { message = message:build(), moved = moved, spoke_label = true })
+        { message = message, moved = moved, spoke_label = true })
 end
 
 local function build_and_process(overlay, command)
@@ -187,11 +189,14 @@ local function build_and_process(overlay, command)
     if not cur or cur.key == D.last_spoken then return nil end
     local fresh = D.last_spoken == nil
     D.last_spoken = cur.key
-    if fresh and overlay.announce then pcall(overlay.announce, overlay, ctx) end
+    if fresh and overlay.announce then
+        pcall(overlay.announce, overlay, ctx)
+        message:sentence()   -- the announcement and the focus label are separate sentences
+    end
     local node = graph.current.nodes[cur.key]
     if node and node.vtable.label then node.vtable.label(ctx) end
     return focus_fields(graph, state,
-        { message = message:build(), entered = true, spoke_label = true })
+        { message = message, entered = true, spoke_label = true })
 end
 
 -- Run one frame, optionally applying a player navigation command:

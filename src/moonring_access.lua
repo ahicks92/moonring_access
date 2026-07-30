@@ -117,9 +117,12 @@ function M.pump(dt)
     if not dispatcher.active_id() then buffers.unbind_details() end
 
     -- Game-log lines captured this frame, coalesced into one non-interrupting
-    -- utterance, then the tile watcher (which follows the same turn's prose).
+    -- utterance (one sentence per line), then the tile watcher (which follows
+    -- the same turn's prose).
     if st.pending_say and #st.pending_say > 0 then
-        speech.say(table.concat(st.pending_say, " "), false)
+        local m = require("ma_mb").new()
+        for _, line in ipairs(st.pending_say) do m:sentence(line) end
+        speech.say(m, false)
         st.pending_say = {}
     end
     pcall(app.watch_tick)

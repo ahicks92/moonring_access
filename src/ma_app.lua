@@ -9,6 +9,7 @@ local text = require("ma_text")
 local speech = require("ma_speech")
 local buffers = require("ma_buffers")
 local hooks = require("ma_hooks")
+local MB = require("ma_mb")
 
 local st = hooks.state
 st.watch = st.watch or {}
@@ -45,7 +46,8 @@ local function announce_hostiles()
                 local okn, name = pcall(a.getDisplayName, a)
                 found[#found + 1] = {
                     d = text.dist(dx, dy),
-                    s = (okn and name or a.actorType or "creature") .. ", " .. text.offset(dx, dy),
+                    s = MB.new():fragment(okn and name or a.actorType or "creature")
+                        :list_item(text.offset(dx, dy)),
                 }
             end
         end
@@ -55,9 +57,9 @@ local function announce_hostiles()
         return
     end
     table.sort(found, function(a, b) return a.d < b.d end)
-    local parts = {}
-    for i = 1, math.min(#found, 10) do parts[#parts + 1] = found[i].s end
-    speech.say(#found .. (#found == 1 and " hostile: " or " hostiles: ") .. table.concat(parts, "; "), true)
+    local m = MB.new():fragment(text.plural(#found, "hostile") .. ":")
+    for i = 1, math.min(#found, 10) do m:sentence(found[i].s) end
+    speech.say(m, true)
 end
 
 -- Map roots worth reporting as points of interest.
@@ -133,14 +135,19 @@ end
 -- nearest first.
 local function announce_pois()
     local found = {}
+    local function spot(d, dx, dy, ...)
+        local e = MB.new()
+        for _, part in ipairs({ ... }) do e:list_item(part) end
+        e:list_item(text.offset(dx, dy))
+        found[#found + 1] = { d = d, s = e }
+    end
     each_gated_tile("visible", function(x, y, dx, dy, root)
         local things, merged = require("ma_map").tile_things(x, y)
         if not merged and root and POI_ROOTS[root] then
-            found[#found + 1] = { d = text.dist(dx, dy),
-                s = root_name(root) .. ", " .. text.offset(dx, dy) }
+            spot(text.dist(dx, dy), dx, dy, root_name(root))
         end
         for _, tn in ipairs(things) do
-            found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
+            spot(text.dist(dx, dy), dx, dy, tn)
         end
     end)
     -- Overworld gatherables at the game's own reveal range (adjacent
@@ -148,8 +155,7 @@ local function announce_pois()
     pcall(function()
         local p = player()
         for _, g in ipairs(require("ma_map").gatherable_reveals(p.position.x, p.position.y)) do
-            found[#found + 1] = { d = text.dist(g.dx, g.dy),
-                s = g.name .. ", " .. text.offset(g.dx, g.dy) }
+            spot(text.dist(g.dx, g.dy), g.dx, g.dy, g.name)
         end
     end)
     pcall(function()
@@ -162,10 +168,8 @@ local function announce_pois()
             end
             if known then
                 local dx, dy = e.x - p.position.x, e.y - p.position.y
-                found[#found + 1] = { d = text.dist(dx, dy),
-                    s = "area exit " .. e.edge
-                        .. (e.width > 1 and (", " .. e.width .. " wide") or "")
-                        .. ", " .. text.offset(dx, dy) }
+                spot(text.dist(dx, dy), dx, dy, "area exit " .. e.edge,
+                    e.width > 1 and (e.width .. " wide") or nil)
             end
         end
     end)
@@ -178,9 +182,7 @@ local function announce_pois()
             if not animal or not animal.position then return end
             local dx, dy = animal.position.x - p.position.x, animal.position.y - p.position.y
             local d = math.max(math.abs(dx), math.abs(dy))
-            if d < range then
-                found[#found + 1] = { d = d, s = "hoofprints, " .. text.offset(dx, dy) }
-            end
+            if d < range then spot(d, dx, dy, "hoofprints") end
         end
         prey_spot(playerStats.foodAnimal)
         local sleathen_alive = true
@@ -193,8 +195,7 @@ local function announce_pois()
             local dx = playerStats.fishPositionX - p.position.x
             local dy = playerStats.fishPositionY - p.position.y
             if math.max(math.abs(dx), math.abs(dy)) <= POI_RADIUS then
-                found[#found + 1] = { d = text.dist(dx, dy),
-                    s = "water ripples, " .. text.offset(dx, dy) }
+                spot(text.dist(dx, dy), dx, dy, "water ripples")
             end
         end
     end)
@@ -204,10 +205,10 @@ local function announce_pois()
         return
     end
     table.sort(found, function(a, b) return a.d < b.d end)
-    local parts = {}
-    for i = 1, math.min(#found, 12) do parts[#parts + 1] = found[i].s end
-    if #found > 12 then parts[#parts + 1] = "and " .. (#found - 12) .. " more" end
-    speech.say(table.concat(parts, ", ") .. ".", true)
+    local m = MB.new()
+    for i = 1, math.min(#found, 12) do m:sentence(found[i].s) end
+    if #found > 12 then m:sentence("and " .. (#found - 12) .. " more") end
+    speech.say(m, true)
 end
 
 -- Terrain roots too common to be worth naming in the Alt+H sweep.
@@ -233,18 +234,19 @@ local function announce_terrain()
     end)
     local list = {}
     for root, g in pairs(groups) do
-        list[#list + 1] = { d = g.d,
-            s = root_name(root) .. (g.count > 1 and (" times " .. g.count) or "")
-                .. ", nearest " .. text.offset(g.dx, g.dy) }
+        local e = MB.new():fragment(root_name(root))
+        if g.count > 1 then e:fragment("times " .. g.count) end
+        e:list_item("nearest " .. text.offset(g.dx, g.dy))
+        list[#list + 1] = { d = g.d, s = e }
     end
     if #list == 0 then
         speech.say("No notable terrain within " .. POI_RADIUS .. " tiles.", true)
         return
     end
     table.sort(list, function(a, b) return a.d < b.d end)
-    local parts = {}
-    for i = 1, math.min(#list, 8) do parts[#parts + 1] = list[i].s end
-    speech.say("Terrain: " .. table.concat(parts, "; "), true)
+    local m = MB.new():fragment("Terrain:")
+    for i = 1, math.min(#list, 8) do m:sentence(list[i].s) end
+    speech.say(m, true)
 end
 
 -- ----------------------------------------------------------------- status --
@@ -263,13 +265,11 @@ local function announce_vitals()
         if p and type(p[field]) == "number" then return p[field] end
         return ps[field]
     end
-    local parts = {
-        "Health " .. round(cur("health")) .. " of " .. round(ps.maxHealth),
-        "poise " .. round(cur("poise")) .. " of " .. round(ps.maxPoise),
-        "energy " .. round(cur("energy")) .. " of " .. round(ps.maxEnergy),
-        "food " .. round(ps.food) .. " of " .. round(ps.maxFood),
-    }
-    speech.say(table.concat(parts, ", "), true)
+    speech.say(MB.new()
+        :list_item("Health " .. round(cur("health")) .. " of " .. round(ps.maxHealth))
+        :list_item("poise " .. round(cur("poise")) .. " of " .. round(ps.maxPoise))
+        :list_item("energy " .. round(cur("energy")) .. " of " .. round(ps.maxEnergy))
+        :list_item("food " .. round(ps.food) .. " of " .. round(ps.maxFood)), true)
 end
 
 local function announce_money()
@@ -280,11 +280,12 @@ local function announce_position()
     local p = player()
     if not p then return end
     local world = tostring(G_stateGame.currentWorldName or "unknown")
-    speech.say(world .. ", " .. p.position.x .. ", " .. p.position.y .. ".", true)
+    speech.say(MB.new():list_item(world)
+        :list_item(p.position.x .. ", " .. p.position.y), true)
 end
 
 local function announce_turns()
-    speech.say("Turn " .. tostring(G_stateGame.playerTurns or 0) .. ".", true)
+    speech.say("Turn " .. tostring(G_stateGame.playerTurns or 0), true)
 end
 
 -- Ctrl+S: HOW MANY hidden things remain on this level — knowledge without
@@ -312,8 +313,9 @@ local function announce_secrets()
             if not ma_map.trap_revealed_root(root) then traps = traps + 1 end
         end
     end)
-    speech.say("Hidden here: " .. doors .. (doors == 1 and " door, " or " doors, ")
-        .. traps .. (traps == 1 and " trap." or " traps."), true)
+    speech.say(MB.new():fragment("Hidden here:")
+        :list_item(text.plural(doors, "door"))
+        :list_item(text.plural(traps, "trap")), true)
 end
 
 -- Status effects: each accumulates 0..1 on the player (the icon bar); at 1
@@ -336,16 +338,23 @@ local function announce_statuses()
         local name = STATUS_NAMES[key] or key
         if flag and p[flag] then
             local v = type(p[key]) == "number" and p[key] or 0
-            active[#active + 1] = name .. ", " .. math.min(100, math.floor(v * 100 + 0.5)) .. " percent left"
+            active[#active + 1] = MB.new():fragment(name)
+                :list_item(math.min(100, math.floor(v * 100 + 0.5)) .. " percent left")
         elseif type(p[key]) == "number" and p[key] > 0 then
             building[#building + 1] = name .. " " .. math.floor(p[key] * 100 + 0.5) .. " percent"
         end
     end
-    local parts = {}
-    if #active > 0 then parts[#parts + 1] = "Active: " .. table.concat(active, ", ") end
-    if #building > 0 then parts[#parts + 1] = "Building: " .. table.concat(building, ", ") end
-    if #parts == 0 then parts[1] = "No status effects." end
-    speech.say(table.concat(parts, ". ") .. ".", true)
+    local m = MB.new()
+    if #active > 0 then
+        m:fragment("Active:")
+        for _, s in ipairs(active) do m:list_item(s) end
+    end
+    if #building > 0 then
+        m:sentence("Building:")
+        for _, s in ipairs(building) do m:list_item(s) end
+    end
+    if m:is_empty() then m:fragment("No status effects") end
+    speech.say(m, true)
 end
 
 -- (Active statuses have no turn counter: the same 0..1 value drains at a
@@ -374,7 +383,8 @@ function M.status_tick()
         local v = type(p[key]) == "number" and p[key] or 0
         local band = is_active and 0 or math.floor(math.min(v, 0.99) * 4)   -- 0..3 quarters
         if band > st.band then
-            speech.say(name .. " rising, " .. math.floor(v * 100 + 0.5) .. " percent.", false)
+            speech.say(MB.new():fragment(name .. " rising")
+                :list_item(math.floor(v * 100 + 0.5) .. " percent"), false)
         elseif st.band > 0 and v <= 0 and not is_active then
             speech.say(name .. " faded.", false)
         end
@@ -410,18 +420,20 @@ function M.status_tick()
                         pretty = (list[action_key] and list[action_key].name)
                             or (list[link.label] and list[link.label].name) or action_key
                     end)
-                    local where = ""
+                    local where = nil
                     pcall(function()
-                        local t = require("ma_text")
-                        where = ", " .. t.offset(other.position.x - p.position.x,
+                        where = text.offset(other.position.x - p.position.x,
                             other.position.y - p.position.y)
                     end)
-                    local phrase = link.ID1 == p.ID
-                        and (pretty .. " link to " .. oname .. where .. ".")
-                        or (pretty .. " link from " .. oname .. where .. "!")
+                    local incoming = link.ID2 == p.ID
+                    local m = MB.new():fragment(pretty)
+                        :fragment(incoming and "link from" or "link to")
+                        :fragment(oname)
+                    if where then m:list_item(where) end
+                    if incoming then m:exclaim() end
                     W.links = W.links or {}
-                    W.links[key] = { pretty = pretty, oname = oname, incoming = link.ID2 == p.ID }
-                    if not silent then speech.say(phrase, true) end
+                    W.links[key] = { pretty = pretty, oname = oname, incoming = incoming }
+                    if not silent then speech.say(m, true) end
                 end
             end
         end
@@ -429,9 +441,9 @@ function M.status_tick()
             if not seen[key] then
                 W.links[key] = nil
                 if not silent then
-                    speech.say(info.pretty .. " link "
-                        .. (info.incoming and ("from " .. info.oname) or ("to " .. info.oname))
-                        .. " broken.", false)
+                    speech.say(MB.new():fragment(info.pretty)
+                        :fragment(info.incoming and "link from" or "link to")
+                        :fragment(info.oname):fragment("broken"), false)
                 end
             end
         end
@@ -448,7 +460,7 @@ function M.status_tick()
         end)
         if ok and r ~= W.detect_r then
             W.detect_r = r
-            speech.say("Detection radius " .. r .. ".", false)
+            speech.say("Detection radius " .. r, false)
         end
     else
         W.detect_r = nil
@@ -480,7 +492,8 @@ function M.status_tick()
             local slot_key = i == 10 and 0 or i   -- slot 10 is the 0 key
             if not first and sig ~= W.binds[i] then
                 if sig then
-                    speech.say("Bound to " .. slot_key .. ": " .. spoken .. ".", true)
+                    speech.say(MB.new():fragment("Bound to " .. slot_key .. ":")
+                        :fragment(spoken), true)
                 elseif W.binds[i] then
                     speech.say("Slot " .. slot_key .. " cleared.", true)
                 end
@@ -493,8 +506,9 @@ end
 local function announce_modes()
     local safety = G_stateGame.safetyModeOn
     local sneak = playerStats and playerStats.isSneaking
-    speech.say("Safety " .. (safety and "on" or "off")
-        .. ", quiet " .. (sneak and "on" or "off") .. ".", true)
+    speech.say(MB.new()
+        :list_item("Safety " .. (safety and "on" or "off"))
+        :list_item("quiet " .. (sneak and "on" or "off")), true)
 end
 
 -- ------------------------------------------------------- LOS discovery -----
@@ -530,6 +544,12 @@ local function discover_landmarks()
 
     local found = {}
     local px, py = p.position.x, p.position.y
+    local function spot(d, dx, dy, ...)
+        local e = MB.new()
+        for _, part in ipairs({ ... }) do e:list_item(part) end
+        e:list_item(text.offset(dx, dy))
+        found[#found + 1] = { d = d, s = e }
+    end
     for dy = -LOS_RADIUS, LOS_RADIUS do
         for dx = -LOS_RADIUS, LOS_RADIUS do
             local x, y = px + dx, py + dy
@@ -539,8 +559,7 @@ local function discover_landmarks()
                     local key = x .. ":" .. y .. ":door"
                     if not seen[key] then
                         seen[key] = true
-                        found[#found + 1] = { d = text.dist(dx, dy),
-                            s = (root_name(root) or "door") .. ", " .. text.offset(dx, dy) }
+                        spot(text.dist(dx, dy), dx, dy, root_name(root) or "door")
                     end
                 end
                 for _, tn in ipairs(trigger_names_at(x, y)) do
@@ -550,8 +569,7 @@ local function discover_landmarks()
                         local key = x .. ":" .. y .. ":" .. tn
                         if not seen[key] then
                             seen[key] = true
-                            found[#found + 1] = { d = text.dist(dx, dy),
-                                s = tn .. ", " .. text.offset(dx, dy) }
+                            spot(text.dist(dx, dy), dx, dy, tn)
                         end
                     end
                 end
@@ -573,8 +591,7 @@ local function discover_landmarks()
                 local key = "prey:" .. animal.position.x .. "," .. animal.position.y
                 if not seen[key] then
                     seen[key] = true
-                    found[#found + 1] = { d = d,
-                        s = "hoofprints, " .. text.offset(dx, dy) }
+                    spot(d, dx, dy, "hoofprints")
                 end
             end
         end
@@ -609,8 +626,7 @@ local function discover_landmarks()
                                 local key = g.name .. ":" .. x .. "," .. y
                                 if not seen[key] then
                                     seen[key] = true
-                                    found[#found + 1] = { d = 1,
-                                        s = g.name .. ", " .. text.offset(dx, dy) }
+                                    spot(1, dx, dy, g.name)
                                 end
                             end
                         end
@@ -629,7 +645,7 @@ local function discover_landmarks()
                     local key = "fish:" .. playerStats.fishPositionX .. "," .. playerStats.fishPositionY
                     if not seen[key] then
                         seen[key] = true
-                        found[#found + 1] = { d = d, s = "water ripples, " .. text.offset(dx, dy) }
+                        spot(d, dx, dy, "water ripples")
                     end
                 end
             end
@@ -644,10 +660,9 @@ local function discover_landmarks()
             for _, t in ipairs(e.tiles) do
                 if ma_map.visible(t.x, t.y) then
                     seen[key] = true
-                    local label = "area exit " .. e.edge
-                        .. (e.width > 1 and (", " .. e.width .. " wide") or "")
-                    found[#found + 1] = { d = text.dist(e.x - px, e.y - py),
-                        s = label .. ", " .. text.offset(e.x - px, e.y - py) }
+                    spot(text.dist(e.x - px, e.y - py), e.x - px, e.y - py,
+                        "area exit " .. e.edge,
+                        e.width > 1 and (e.width .. " wide") or nil)
                     break
                 end
             end
@@ -656,10 +671,10 @@ local function discover_landmarks()
 
     if #found > 0 then
         table.sort(found, function(a, b) return a.d < b.d end)
-        local parts = {}
-        for i = 1, math.min(#found, 5) do parts[#parts + 1] = found[i].s end
-        if #found > 5 then parts[#parts + 1] = "and " .. (#found - 5) .. " more" end
-        speech.say("Spotted: " .. table.concat(parts, "; ") .. ".", false)
+        local m = MB.new():fragment("Spotted:")
+        for i = 1, math.min(#found, 5) do m:sentence(found[i].s) end
+        if #found > 5 then m:sentence("and " .. (#found - 5) .. " more") end
+        speech.say(m, false)
     end
 end
 
@@ -679,7 +694,7 @@ function M.watch_tick()
     W.px, W.py = x, y
     if first then W.root = nil; W.reveals = nil; return end   -- world entry; "Entering X" covers it
 
-    local parts = {}
+    local m = MB.new()
     local ok, root = pcall(p.getCurrentTileRoot, p)
     root = ok and root or nil
     local root_changed = root ~= W.root
@@ -693,15 +708,15 @@ function M.watch_tick()
     if shape_text then
         local is_straight = shape_key == "path:ns" or shape_key == "path:ew"
         if root_changed or (shape_key ~= W.path_key and not is_straight) then
-            parts[#parts + 1] = shape_text
+            m:list_item(shape_text)
         end
     elseif root_changed then
         local named = root and not BORING_ROOTS[root] and root_name(root) or nil
-        if named then parts[#parts + 1] = named end
+        if named then m:list_item(named) end
     end
     W.path_key = shape_key
     for _, tn in ipairs(trigger_names_at(x, y)) do
-        parts[#parts + 1] = tn
+        m:list_item(tn)
     end
     -- Overworld gatherable reveals: the game sparkles ADJACENT tiles each
     -- step (the "here!" cases speak through the rising-text feed). Keyed by
@@ -714,15 +729,13 @@ function M.watch_tick()
                 local key = g.name .. ":" .. (x + g.dx) .. ":" .. (y + g.dy)
                 seen[key] = true
                 if not (W.reveals and W.reveals[key]) then
-                    parts[#parts + 1] = g.name .. ", " .. text.offset(g.dx, g.dy)
+                    m:list_item(g.name):list_item(text.offset(g.dx, g.dy))
                 end
             end
         end
         W.reveals = seen
     end)
-    if #parts > 0 then
-        speech.say(table.concat(parts, ", ") .. ".", false)
-    end
+    speech.say(m, false)
 
     -- The wall echo fires on every real move (the primary spatial channel),
     -- preceded by a terrain-differentiated step cue. The movement delta gives
@@ -769,9 +782,9 @@ function M.install()
             if not p or not p.position or not actor.position then return end
             local name = "Something"
             pcall(function() name = actor:getCapitalisedDisplayName() end)
-            local where = require("ma_text").offset(
-                actor.position.x - p.position.x, actor.position.y - p.position.y)
-            speech.say(name .. " alert, " .. where .. ".", false)
+            speech.say(MB.new():fragment(name .. " alert")
+                :list_item(text.offset(actor.position.x - p.position.x,
+                    actor.position.y - p.position.y)), false)
         end)
         return r
     end)
@@ -788,7 +801,9 @@ function M.install()
                 local data = self.map:getCellDataAtMapXYZeroIndexed(x, y)
                 if not (data and CCellData.cellIsSecretDoor[data.name]) then
                     local where = offset_from_player_map_xy(x, y)
-                    if where then speech.say("Secret door " .. where .. ".", false) end
+                    if where then
+                        speech.say(MB.new():fragment("Secret door"):fragment(where), false)
+                    end
                 end
             end)
         end
@@ -810,7 +825,8 @@ function M.install()
             local ok, name = pcall(t.getDisplayName, t)
             local dx = t.position.x - p.position.x
             local dy = t.position.y - p.position.y
-            speech.say((ok and name or "target") .. ", " .. text.offset(dx, dy) .. ".", true)
+            speech.say(MB.new():fragment(ok and name or "target")
+                :list_item(text.offset(dx, dy)), true)
         end)
         return r
     end)
@@ -824,7 +840,9 @@ function M.install()
             if r and after ~= before then
                 local where = offset_from_player_map_xy(x, y)
                 local name = root_name(after) or "a trap"
-                if where then speech.say(name .. " spotted " .. where .. ".", false) end
+                if where then
+                    speech.say(MB.new():fragment(name):fragment("spotted"):fragment(where), false)
+                end
             end
         end)
         return r
@@ -869,16 +887,16 @@ local function announce_weather()
     if not p then return end
     local map = require("ma_map")
     local px, py = p.position.x, p.position.y
-    local parts = {}
+    local m = MB.new()
 
     if map.is_amber(px, py) then
         local dx, dy = nearest_amber(px, py, false)
-        parts[#parts + 1] = dx and ("Amber fog here, clear " .. compass(dx, dy))
-            or "Amber fog here"
+        m:fragment("Amber fog here")
+        if dx then m:list_item("clear " .. compass(dx, dy)) end
     else
         local dx, dy = nearest_amber(px, py, true)
-        parts[#parts + 1] = dx and ("Amber fog " .. compass(dx, dy))
-            or ("No amber fog within " .. AMBER_SCAN)
+        if dx then m:fragment("Amber fog"):fragment(compass(dx, dy))
+        else m:fragment("No amber fog within " .. AMBER_SCAN) end
     end
 
     -- windDirection names the SOURCE (maritime convention): sailing while
@@ -886,19 +904,19 @@ local function announce_weather()
     -- opposite way. Sighted players learn this from the particle drift.
     local w = G_stateGame.weather
     if w and w.windDirection then
-        parts[#parts + 1] = "Wind from the " .. (WIND_NAMES[w.windDirection] or "unknown")
+        m:sentence("Wind from the " .. (WIND_NAMES[w.windDirection] or "unknown"))
     end
 
     local rain = 0
     pcall(function() rain = w:getRainFraction() end)
     if rain < 0.05 then
-        parts[#parts + 1] = "Clear skies"
+        m:sentence("Clear skies")
     elseif rain < 0.33 then
-        parts[#parts + 1] = "Light rain"
+        m:sentence("Light rain")
     elseif rain < 0.66 then
-        parts[#parts + 1] = "Rain"
+        m:sentence("Rain")
     else
-        parts[#parts + 1] = "Heavy rain"
+        m:sentence("Heavy rain")
     end
 
     pcall(function()
@@ -906,15 +924,15 @@ local function announce_weather()
         local date = cal.getMainDateAsText()
         if date == "Date Unknown" then
             -- Post-game sun/moon cycle: the date is hidden but day/night is real.
-            parts[#parts + 1] = cal.isDay() and "Daytime" or "Night"
+            m:sentence(cal.isDay() and "Daytime" or "Night")
         else
-            parts[#parts + 1] = date
+            m:sentence(date)
             local god = cal.getGodNameFromMoon(cal.worldMoon)
-            if god then parts[#parts + 1] = "Moon of " .. god end
+            if god then m:sentence("Moon of " .. god) end
         end
     end)
 
-    speech.say(table.concat(parts, ". ") .. ".", true)
+    speech.say(m, true)
 end
 
 -- --------------------------------------------------------------- dispatch --
@@ -967,17 +985,19 @@ local ACTIONS = {
         local ps = playerStats
         if not ps then return end
         local p = G_stateGame.actorManager.player
-        local parts = {
-            tostring(ps.name) .. ", level " .. tostring(ps.level),
-            "strength " .. ps.strength .. ", intellect " .. ps.intellect
-                .. ", finesse " .. ps.finesse .. ", perception " .. ps.perception
-                .. ", endurance " .. ps.endurance .. ", luck " .. ps.luck,
-        }
+        local m = MB.new():fragment(tostring(ps.name))
+            :list_item("level " .. tostring(ps.level))
+            :sentence("strength " .. ps.strength)
+            :list_item("intellect " .. ps.intellect)
+            :list_item("finesse " .. ps.finesse)
+            :list_item("perception " .. ps.perception)
+            :list_item("endurance " .. ps.endurance)
+            :list_item("luck " .. ps.luck)
         local ok, melee = pcall(p.getMeleeWeaponData, p)
-        if ok and melee and melee.name then parts[#parts + 1] = "wielding " .. melee.name end
+        if ok and melee and melee.name then m:sentence("wielding " .. melee.name) end
         local ok2, ranged = pcall(p.getRangedWeaponData, p)
-        if ok2 and ranged and ranged.name then parts[#parts + 1] = "ranged " .. ranged.name end
-        speech.say(table.concat(parts, ". ") .. ".", true)
+        if ok2 and ranged and ranged.name then m:sentence("ranged " .. ranged.name) end
+        speech.say(m, true)
     end,
 }
 

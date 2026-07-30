@@ -13,6 +13,7 @@ local gamestate = require("library.gamestate")
 local ma_text = require("ma_text")
 local items = require("ma_items")
 local hooks = require("ma_hooks")
+local MB = require("ma_mb")
 
 local M = {}
 
@@ -58,8 +59,8 @@ local buy = {
     announce = function(self, ctx)
         local panel = G_stateGame.buyPanel
         local n = #(panel.sortedInventory or {})
-        ctx.message:fragment("Buying from " .. vendor_name(panel.vendorRole) .. ", "
-            .. n .. (n == 1 and " item." or " items."))
+        ctx.message:fragment("Buying from"):fragment(vendor_name(panel.vendorRole))
+            :list_item(ma_text.plural(n, "item"))
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.buyPanel
@@ -86,10 +87,10 @@ local buy = {
                 label = function(ctx)
                     local d = def()
                     ctx.message:fragment(clean(d and d.name or entry.ID))
-                    if (entry.amount or 1) ~= 1 then ctx.message:fragment("x " .. entry.amount) end
+                    if (entry.amount or 1) ~= 1 then ctx.message:list_item("x " .. entry.amount) end
                     local ok, price = pcall(economy.getActualBuyValue, economy, d)
-                    if ok and price then ctx.message:fragment(price .. " guineas") end
-                    ctx.message:fragment(idx .. " of " .. #inv)
+                    if ok and price then ctx.message:list_item(price .. " guineas") end
+                    ctx.message:list_item(idx .. " of " .. #inv)
                 end,
                 on_click = function(ctx)
                     panel.cursorPosition = idx   -- visual parity, write-only
@@ -134,8 +135,8 @@ local sell = {
         local cat = (G_Globals.categorySellTypes and G_Globals.categorySellTypes[panel.categoryIndex])
             or (G_Globals.categoryTypes and G_Globals.categoryTypes[panel.categoryIndex]) or "items"
         local n = #(panel.sortedInventory or {})
-        ctx.message:fragment("Selling to " .. vendor_name(panel.vendorRole) .. ". "
-            .. tostring(cat) .. ", " .. n .. (n == 1 and " item." or " items."))
+        ctx.message:fragment("Selling to"):fragment(vendor_name(panel.vendorRole))
+            :sentence(tostring(cat)):list_item(ma_text.plural(n, "item"))
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.sellPanel
@@ -162,10 +163,10 @@ local sell = {
                     local name = item.name
                     pcall(function() name = G_stateGame:getModifiedObjectName(item) end)
                     ctx.message:fragment(clean(name))
-                    if (item.count or 1) > 1 then ctx.message:fragment("x " .. item.count) end
+                    if (item.count or 1) > 1 then ctx.message:list_item("x " .. item.count) end
                     local ok, price = pcall(economy.getActualSellValue, economy, item)
-                    if ok and price then ctx.message:fragment(price .. " guineas") end
-                    ctx.message:fragment(idx .. " of " .. #inv)
+                    if ok and price then ctx.message:list_item(price .. " guineas") end
+                    ctx.message:list_item(idx .. " of " .. #inv)
                 end,
                 on_click = function(ctx)
                     panel.cursorPosition = idx
@@ -253,7 +254,7 @@ local character = {
     end,
     announce = function(self, ctx)
         local name = playerStats and playerStats.name or "Character"
-        ctx.message:fragment(clean(name) .. ", character sheet.")
+        ctx.message:fragment(clean(name)):list_item("character sheet")
     end,
     build = function(self, b)
         if not in_game() or not G_stateGame.showCharacterPanel then return end
@@ -430,23 +431,25 @@ local function skill_tile_data()
     return nil
 end
 
-local function god_row_text(y)
+-- Append the god's summary row (name, devotion, standing) to the builder;
+-- returns the builder. Details lines get a string via god_row(MB.new(), y).
+local function god_row(m, y)
     local god = G_Globals.skillFactions[y]
     local gd = G_Globals.godData[god] or {}
-    local parts = { clean(gd.name or god) }
+    m:list_item(clean(gd.name or god))
     pcall(function()
-        parts[#parts + 1] = "devotion " .. G_stateGame:getDevotion(god)
+        m:list_item("devotion " .. G_stateGame:getDevotion(god))
     end)
     pcall(function()
         if G_stateGame:isCursedByGod(god) then
-            parts[#parts + 1] = "cursed"
+            m:list_item("cursed")
         elseif G_stateGame:isDedicatedToGod(god) then
-            parts[#parts + 1] = "dedicated"
+            m:list_item("dedicated")
         elseif playerStats.currentlyFollowingGods and playerStats.currentlyFollowingGods[god] then
-            parts[#parts + 1] = "following"
+            m:list_item("following")
         end
     end)
-    return table.concat(parts, ", ")
+    return m
 end
 
 -- The god's devotional task list (the scroll column's info-pane table):
@@ -461,16 +464,15 @@ local function god_task_lines(god)
             if t[1] then done = done + 1 end
             local desc = clean(tostring(t[2] or "")):gsub("%s+", " ")
             local cur, req = tostring(t[3] or ""):match("(%d+)%s*/%s*(%d+)")
-            local progress = cur and (cur .. " of " .. req) or ""
             local reward = clean(tostring(t[4] or ""))
-            local line = desc
+            local line = MB.new():fragment(desc)
             if t[1] then
-                line = line .. ", complete"
+                line:list_item("complete")
             else
-                if progress ~= "" then line = line .. ", " .. progress end
-                if reward ~= "" then line = line .. ". " .. reward .. " devotion" end
+                if cur then line:list_item(cur .. " of " .. req) end
+                if reward ~= "" then line:sentence(reward .. " devotion") end
             end
-            lines[#lines + 1] = line
+            lines[#lines + 1] = line:build()
         end
     end)
     if not ok then return nil end
@@ -515,7 +517,7 @@ local gods = {
             end
             if #row_cells > 0 then
                 b:start_row("god" .. y, function(ctx)
-                    ctx.message:fragment(god_row_text(yy) .. ".")
+                    god_row(ctx.message, yy)
                 end)
                 for _, rc in ipairs(row_cells) do
                     local xx, the_cell, the_td = rc.x, rc.cell, rc.td
@@ -526,19 +528,19 @@ local gods = {
                                 pcall(function()
                                     if G_stateGame:isDedicatedToGod(god) then verb = "pray" end
                                 end)
-                                ctx.message:fragment(clean(gd.name or god) .. ", " .. verb)
+                                ctx.message:fragment(clean(gd.name or god)):list_item(verb)
                             elseif xx == 2 then
                                 local _, done, total = god_task_lines(god)
                                 if total and total > 0 then
-                                    ctx.message:fragment("Devotional tasks, "
-                                        .. done .. " of " .. total .. " complete")
+                                    ctx.message:fragment("Devotional tasks")
+                                        :list_item(done .. " of " .. total .. " complete")
                                 else
                                     ctx.message:fragment("Devotional tasks scroll")
                                 end
                             else
                                 ctx.message:fragment(clean((the_td and the_td.title) or the_cell.tileDataName))
                                 local state = cell_state_text(tree, the_cell, the_td, xx)
-                                if state then ctx.message:fragment(state) end
+                                if state then ctx.message:list_item(state) end
                             end
                         end,
                         -- Cursor sync on focus: the tree's digit-shortcut
@@ -559,8 +561,10 @@ local gods = {
                             local lines = {}
                             if xx == 2 then
                                 local tasks, done, total = god_task_lines(god)
-                                lines[#lines + 1] = clean(gd.name or god) .. ", devotional tasks"
-                                    .. (total and (", " .. done .. " of " .. total .. " complete") or "")
+                                local head = MB.new():fragment(clean(gd.name or god))
+                                    :list_item("devotional tasks")
+                                if total then head:list_item(done .. " of " .. total .. " complete") end
+                                lines[#lines + 1] = head:build()
                                 for _, l in ipairs(tasks or {}) do lines[#lines + 1] = l end
                                 return lines
                             end
@@ -571,7 +575,7 @@ local gods = {
                                 if gd.restrictions and gd.restrictions ~= "" then
                                     lines[#lines + 1] = "Taboo: " .. clean(gd.restrictions)
                                 end
-                                lines[#lines + 1] = god_row_text(yy)
+                                lines[#lines + 1] = god_row(MB.new(), yy):build()
                             else
                                 lines[#lines + 1] = clean((the_td and the_td.title) or the_cell.tileDataName)
                                 if the_td and the_td.description then
@@ -697,7 +701,8 @@ function M.tracked_where()
         speech.say(t.name .. ": position unknown.", true)
         return
     end
-    speech.say(t.name .. ": " .. compass_offset(t.x - px, t.y - py) .. ".", true)
+    speech.say(MB.new():fragment(t.name .. ":")
+        :fragment(compass_offset(t.x - px, t.y - py)), true)
 end
 
 local map_screen = {
@@ -707,8 +712,8 @@ local map_screen = {
     end,
     announce = function(self, ctx)
         local n = #known_locations()
-        ctx.message:fragment("Map, " .. n .. (n == 1 and " known location." or " known locations.")
-            .. " Enter tracks.")
+        ctx.message:fragment("Map"):list_item(ma_text.plural(n, "known location"))
+            :sentence("Enter tracks")
     end,
     build = function(self, b)
         if not in_game() or not G_stateGame.isMapOpen then return end
@@ -727,19 +732,20 @@ local map_screen = {
             b:add_item(Id.structural("loc:" .. tostring(l.key)), {
                 label = function(ctx)
                     ctx.message:fragment(l.name)
-                    ctx.message:fragment(compass_offset(l.dx, l.dy))
-                    ctx.message:fragment(l.status)
-                    if tracked and tracked.key == l.key then ctx.message:fragment("tracked") end
+                    ctx.message:list_item(compass_offset(l.dx, l.dy))
+                    ctx.message:list_item(l.status)
+                    if tracked and tracked.key == l.key then ctx.message:list_item("tracked") end
                 end,
                 on_click = function(ctx)
                     M.set_tracked(l)
-                    ctx.message:fragment("Tracking " .. l.name .. ".")
+                    ctx.message:fragment("Tracking"):fragment(l.name)
                 end,
                 details = function()
                     local lines = { l.name }
                     if l.region then lines[#lines + 1] = "Region: " .. clean(l.region) end
-                    lines[#lines + 1] = compass_offset(l.dx, l.dy)
-                        .. (l.dist > 0 and (", " .. l.dist .. " overworld steps") or "")
+                    local where = MB.new():fragment(compass_offset(l.dx, l.dy))
+                    if l.dist > 0 then where:list_item(l.dist .. " overworld steps") end
+                    lines[#lines + 1] = where:build()
                     lines[#lines + 1] = l.status
                     pcall(function()
                         local vision = G_Globals.hengeToDescription[l.key]

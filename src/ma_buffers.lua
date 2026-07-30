@@ -134,8 +134,8 @@ function M.switch(dir)
             -- Scrollback buffers park at latest; the details buffer reads
             -- top-down, so re-entering it restarts at the first line.
             B.pos[key] = (key == "details") and 0 or nil
-            local count = #B.lines[key]
-            return B.names[key] .. ", " .. count .. (count == 1 and " line" or " lines")
+            return require("ma_mb").new():fragment(B.names[key])
+                :list_item(require("ma_text").plural(#B.lines[key], "line"))
         end
     end
     require("ma_synth").cue("bonk")

@@ -10,6 +10,7 @@ local hooks = require("ma_hooks")
 local speech = require("ma_speech")
 local text = require("ma_text")
 local map = require("ma_map")
+local MB = require("ma_mb")
 
 local st = hooks.state
 st.target = st.target or {}
@@ -18,20 +19,19 @@ local T = st.target
 local M = {}
 
 local function describe_target(x, y, dx, dy)
-    local parts = {}
+    local m = MB.new()
     local c = map.creature_at(x, y)
     if c then
         local ok, name = pcall(c.getDisplayName, c)
-        local label = ok and name or "creature"
+        m:list_item(ok and name or "creature")
         if c.health and c.maxHealth and c.maxHealth > 0 then
-            label = label .. ", " .. math.floor(c.health / c.maxHealth * 100 + 0.5) .. " percent"
+            m:list_item(math.floor(c.health / c.maxHealth * 100 + 0.5) .. " percent")
         end
-        parts[#parts + 1] = label
     else
-        parts[#parts + 1] = map.root_name(map.root(x, y)) or "unknown"
+        m:list_item(map.root_name(map.root(x, y)) or "unknown")
     end
-    parts[#parts + 1] = text.offset(dx, dy)
-    speech.say(table.concat(parts, ", ") .. ".", true)
+    m:list_item(text.offset(dx, dy))
+    speech.say(m, true)
 end
 
 function M.tick()
@@ -57,7 +57,7 @@ function M.tick()
             if T.last == nil then speech.say("Aiming.", true) end
             T.last = key
             local dir = dy < 0 and "north" or dy > 0 and "south" or dx < 0 and "west" or "east"
-            speech.say(dir .. ".", true)
+            speech.say(dir, true)
         end
     else
         if T.last ~= nil then

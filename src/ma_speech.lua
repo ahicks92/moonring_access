@@ -119,10 +119,19 @@ function M.init(mod_dir)
     return S.loaded
 end
 
--- Speak text. interrupt defaults to false (never cut off in-progress speech
--- unless the caller means it). The observer and log fire unconditionally.
+-- Speak text — a plain string or a MessageBuilder (built here; the normal
+-- calling convention is to hand say() the builder, unbuilt). An empty builder
+-- speaks nothing. Terminal punctuation is supplied here when missing, so
+-- callers never manage trailing full stops. interrupt defaults to false
+-- (never cut off in-progress speech unless the caller means it). The observer
+-- and log fire unconditionally.
 function M.say(text, interrupt)
+    if type(text) == "table" and text.build then
+        local ok, built = pcall(text.build, text)
+        text = ok and built or nil
+    end
     if type(text) ~= "string" or text == "" then return end
+    if not text:match("[%.%!%?%:][%)%]\"']*$") then text = text .. "." end
     if M.observer then pcall(M.observer, text) end
     log("say: " .. text)
     if not S.loaded or M.muted() then return end

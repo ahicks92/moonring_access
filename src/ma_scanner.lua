@@ -11,6 +11,7 @@ local speech = require("ma_speech")
 local text = require("ma_text")
 local map = require("ma_map")
 local synth = require("ma_synth")
+local MB = require("ma_mb")
 
 local st = hooks.state
 st.scanner = st.scanner or {}
@@ -306,8 +307,10 @@ local function speak_entry(list, idx, with_cat)
     local x, y = f.pos()
     local where = "gone"
     if x then where = text.offset(x - p.position.x, y - p.position.y) end
-    local prefix = with_cat and (CAT_NAMES[S.cat or "visible"] .. ": ") or ""
-    speech.say(prefix .. f.name() .. ", " .. where .. ", " .. idx .. " of " .. #list .. ".", true)
+    local m = MB.new()
+    if with_cat then m:fragment(CAT_NAMES[S.cat or "visible"] .. ":") end
+    m:list_item(f.name()):list_item(where):list_item(idx .. " of " .. #list)
+    speech.say(m, true)
 end
 
 function M.rescan(silent)
@@ -325,7 +328,7 @@ function M.rescan(silent)
     end
     S.idx = math.min(idx, math.max(1, #list))
     if not silent then
-        speech.say("Scanned: " .. #feats .. " features.", true)
+        speech.say("Scanned: " .. text.plural(#feats, "feature"), true)
     end
 end
 

@@ -53,4 +53,11 @@ function M.dist(dx, dy)
     return math.max(math.abs(dx), math.abs(dy))
 end
 
+-- Counted noun as one atomic phrase: "1 hostile", "3 hostiles". Irregular
+-- plurals pass the plural form explicitly.
+function M.plural(n, singular, plural)
+    local word = n == 1 and singular or (plural or (singular .. "s"))
+    return n .. " " .. word
+end
+
 return M

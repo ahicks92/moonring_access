@@ -62,7 +62,7 @@ local multi_choice = {
     announce = function(self, ctx)
         local box = widget("multiChoiceBox")
         if box and box.bodyText and box.bodyText ~= "" then
-            ctx.message:fragment(clean(box.bodyText) .. " menu.")
+            ctx.message:fragment(clean(box.bodyText)):fragment("menu")
         end
     end,
     build = function(self, b)
@@ -83,8 +83,8 @@ local multi_choice = {
             local vtable = {
                 label = function(ctx)
                     ctx.message:fragment(text)
-                    if special then ctx.message:fragment(value_text()) end
-                    ctx.message:fragment(idx .. " of " .. n)
+                    if special then ctx.message:list_item(value_text()) end
+                    ctx.message:list_item(idx .. " of " .. n)
                 end,
                 on_click = function(ctx)
                     if special then
@@ -97,7 +97,7 @@ local multi_choice = {
                             end
                         end
                         ctx.message:fragment(text)
-                        ctx.message:fragment(value_text())
+                        ctx.message:list_item(value_text())
                     else
                         box.cursorPosition = idx
                         box:selectItemAtCursor()
@@ -215,8 +215,8 @@ local tutorial = {
             label = function(ctx)
                 local body = clean(box.bodyText)
                 log_once("tutorial", tostring(box.bodyText), "Tutorial: " .. body)
-                ctx.message:fragment("Tutorial: " .. body)
-                ctx.message:fragment("Enter to dismiss.")
+                ctx.message:fragment("Tutorial:"):fragment(body)
+                ctx.message:sentence("Enter to dismiss")
             end,
             on_click = function(ctx)
                 box:nextPage()
@@ -227,8 +227,8 @@ local tutorial = {
 
 local text_input = announce_only("text_input", "textInputBox", function(box, ctx)
     ctx.message:fragment(clean(box.bodyText))
-    ctx.message:fragment(box.numbersOnly and "Number entry." or "Text entry.")
-    ctx.message:fragment("Type and press enter.")
+    ctx.message:sentence(box.numbersOnly and "Number entry" or "Text entry")
+    ctx.message:sentence("Type and press enter")
 end)
 
 -- Number box: sub-identity includes the value, so left/right adjustments
@@ -254,8 +254,8 @@ local number_box = {
         if not box or not box.isOpen then return end
         b:add_label(Id.structural("number"), function(ctx)
             ctx.message:fragment(clean(box.bodyText))
-            ctx.message:fragment(tostring(box.number))
-            ctx.message:fragment("Left and right to adjust, enter to confirm.")
+            ctx.message:list_item(tostring(box.number))
+            ctx.message:sentence("Left and right to adjust, enter to confirm")
         end)
     end,
 }
@@ -280,8 +280,9 @@ local inventory = {
         local panel = G_stateGame.inventoryPanel
         local cat = (G_Globals.categoryTypes and G_Globals.categoryTypes[panel.categoryIndex]) or "items"
         local n = #(panel.sortedInventory or {})
-        ctx.message:fragment("Inventory, " .. tostring(cat) .. ", " .. n
-            .. (n == 1 and " item." or " items.") .. " Left and right change category.")
+        ctx.message:fragment("Inventory"):list_item(tostring(cat))
+            :list_item(require("ma_text").plural(n, "item"))
+            :sentence("Left and right change category")
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.inventoryPanel
@@ -309,10 +310,10 @@ local inventory = {
             b:add_item(Id.referenced(item, "item:" .. tostring(item.ID)), {
                 label = function(ctx)
                     ctx.message:fragment(display_name())
-                    if (item.count or 1) > 1 then ctx.message:fragment("x " .. item.count) end
+                    if (item.count or 1) > 1 then ctx.message:list_item("x " .. item.count) end
                     local ok, worn = pcall(panel.isObjectWornOrWielded, panel, item)
-                    if ok and worn then ctx.message:fragment("equipped") end
-                    ctx.message:fragment(idx .. " of " .. #inv)
+                    if ok and worn then ctx.message:list_item("equipped") end
+                    ctx.message:list_item(idx .. " of " .. #inv)
                 end,
                 -- Cursor sync on focus: the panel's digit-shortcut binding
                 -- (1-0 bind a usable item) reads ITS cursor.
@@ -349,17 +350,17 @@ local function note_label(note)
     return t
 end
 
-local function note_body(panel, note)
-    if not note then return "" end
+-- Append the note's assembled body (speaker-attributed) to the builder.
+local function note_body(m, panel, note)
+    if not note then return end
     if note.tag then
         local arr = panel.noteDictionaryOfArraysWithTag[note.tag] or {}
-        local parts = {}
         for _, v in ipairs(arr) do
-            parts[#parts + 1] = (v.speaker and (clean(v.speaker) .. ": ") or "") .. clean(v.text)
+            m:sentence((v.speaker and (clean(v.speaker) .. ": ") or "") .. clean(v.text))
         end
-        return table.concat(parts, " ")
+        return
     end
-    return clean(note.text or "")
+    m:fragment(clean(note.text or ""))
 end
 
 local notes = {
@@ -377,9 +378,9 @@ local notes = {
         local panel = G_stateGame.notePanel
         local cat = NOTE_CATEGORIES[panel.categoryIndex] or "notes"
         local n = #(panel.sortedNotes or {})
-        ctx.message:fragment("Notes, " .. cat .. ", " .. n
-            .. (n == 1 and " entry." or " entries.")
-            .. " Enter reads a note, left and right change category.")
+        ctx.message:fragment("Notes"):list_item(cat)
+            :list_item(require("ma_text").plural(n, "entry", "entries"))
+            :sentence("Enter reads a note, left and right change category")
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.notePanel
@@ -400,13 +401,13 @@ local notes = {
             local idx, n = i, note
             local read_body = function(ctx)
                 panel.cursorPosition = idx   -- visual parity, write-only
-                ctx.message:fragment(note_body(panel, n))
+                note_body(ctx.message, panel, n)
             end
             b:start_row("note" .. i)
             b:add_item(Id.structural("note:" .. tostring(n.tag or i)), {
                 label = function(ctx)
                     ctx.message:fragment(note_label(n))
-                    ctx.message:fragment(idx .. " of " .. #list)
+                    ctx.message:list_item(idx .. " of " .. #list)
                 end,
                 on_click = read_body,
                 on_read_info = read_body,
@@ -439,7 +440,7 @@ local top_menu = {
             b:add_item(Id.structural("cat:" .. name), {
                 label = function(ctx)
                     ctx.message:fragment(name)
-                    ctx.message:fragment(idx .. " of " .. #cats)
+                    ctx.message:list_item(idx .. " of " .. #cats)
                 end,
                 on_click = function(ctx)
                     local game = G_stateGame
@@ -524,7 +525,7 @@ local tuning = {
             b:add_item(Id.structural("tune:" .. param.key), {
                 label = function(ctx)
                     ctx.message:fragment(param.label)
-                    ctx.message:fragment(tostring(synth.get_tuning(param.key)))
+                    ctx.message:list_item(tostring(synth.get_tuning(param.key)))
                 end,
                 on_click = function(ctx)
                     synth.demo()
@@ -577,9 +578,9 @@ local death = {
             ctx.message:fragment("You died.")
             ctx.message:fragment(clean(G_stateGame.deathCauseString))
             if playerStats and playerStats.permadeath then
-                ctx.message:fragment("Press Enter to restart your quest.")
+                ctx.message:sentence("Press Enter to restart your quest")
             else
-                ctx.message:fragment("Press Enter to reload your last autosave.")
+                ctx.message:sentence("Press Enter to reload your last autosave")
             end
         end)
     end,
