@@ -78,17 +78,35 @@ function M.location_name_at(x, y)
     return nil
 end
 
--- Spoken name for the tile root at (x, y): a henge tile carries its
--- location's display name ("Runacarr henge") once known or seen; everything
--- else is the plain root name.
+-- Spoken name for the tile root at (x, y): an overworld location tile
+-- carries its display name once known or seen — "Runacarr henge", "Yarrow
+-- village", "Yarrow Cave" (the kind is appended only when the name doesn't
+-- already contain it). Everything else is the plain root name.
 function M.root_label(x, y, root)
     root = root or M.root(x, y)
     local base = M.root_name(root)
-    if root == "henge" then
-        local loc = M.location_name_at(x, y)
-        if loc then return loc .. " henge" end
+    local loc = M.location_name_at(x, y)
+    if loc then
+        local l = loc:lower()
+        for word in tostring(base or ""):lower():gmatch("%a+") do
+            if l:find(word, 1, true) then return loc end
+        end
+        if base then return loc .. " " .. tostring(base):lower() end
+        return loc
     end
     return base
+end
+
+-- True when a trigger action IS an overworld location name (the game's
+-- enter-location triggers carry the destination world as their action).
+-- The tile's icon root announces these — speaking the raw world name would
+-- stutter ("Runacarr henge, henge1") or leak an unseen location's identity.
+function M.is_location_action(action)
+    if not action or not G_stateGame then return false end
+    if tostring(G_stateGame.currentWorldName) ~= "Overworld" then return false end
+    local wd = nil
+    pcall(function() wd = require("world_data").getWorldDataWithName(tostring(action)) end)
+    return wd ~= nil
 end
 
 -- Unrevealed secret door at world x,y (cell NAME check; reveals rewrite the
@@ -242,7 +260,9 @@ function M.tile_things(x, y)
         elseif a == "locked_chest" then names[#names + 1] = "locked container"
         elseif a:sub(1, 7) == "object:" then
             names[#names + 1] = M.object_name(a:sub(8))
-        elseif not SKIP_ACTIONS[a] then names[#names + 1] = a end
+        elseif not SKIP_ACTIONS[a] and not M.is_location_action(a) then
+            names[#names + 1] = a
+        end
     end
     return names, false
 end

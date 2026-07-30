@@ -124,7 +124,8 @@ local function trigger_names_at(x, y)
             names[#names + 1] = "passage"
         elseif action == "object" then
             names[#names + 1] = require("ma_map").object_name(t.data) or "item"
-        elseif action and not SKIP[action] then
+        elseif action and not SKIP[action]
+            and not require("ma_map").is_location_action(action) then
             names[#names + 1] = tostring(action)
         end
     end

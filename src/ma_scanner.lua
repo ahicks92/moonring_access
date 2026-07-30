@@ -220,7 +220,7 @@ local function build_snapshot()
                                 feats[#feats + 1] = f
                             elseif a == "warp" then
                                 feats[#feats + 1] = trigger_feature(x, y, "passage")
-                            elseif a and not SKIP[a] then
+                            elseif a and not SKIP[a] and not map.is_location_action(a) then
                                 feats[#feats + 1] = trigger_feature(x, y, tostring(a))
                             end
                         end
