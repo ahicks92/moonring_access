@@ -50,6 +50,29 @@ function M.root_name(root)
     return named or root
 end
 
+-- Unrevealed secret door at world x,y (cell NAME check; reveals rewrite the
+-- cell so revealed ones drop out naturally).
+function M.secret_door_at(x, y)
+    local map = M.game_map()
+    local mx, my = M.to_map(x, y)
+    if not map or not mx then return false end
+    local ok, data = pcall(map.getCellDataAtMapXYZeroIndexed, map, mx, my)
+    if not ok or not data then return false end
+    return (CCellData and CCellData.cellIsSecretDoor and CCellData.cellIsSecretDoor[data.name]) and true or false
+end
+
+-- Roots a revealed trap can wear; an fnTrap trigger on any other root is
+-- still hidden.
+local REVEALED_TRAP_ROOTS = {
+    trapSpikesOn = true, trapSpikesOff = true, trapdoorOpen = true,
+    trapdoorClosed = true, fireTrapOff = true, fire = true, embers = true,
+    deadEmbers = true, amberTrapOn = true, amberTrapOff = true,
+}
+
+function M.trap_revealed_root(root)
+    return root and REVEALED_TRAP_ROOTS[root] or false
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end

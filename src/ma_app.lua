@@ -205,6 +205,35 @@ local function announce_turns()
     speech.say("Turn " .. tostring(G_stateGame.playerTurns or 0) .. ".", true)
 end
 
+-- Ctrl+S: HOW MANY hidden things remain on this level — knowledge without
+-- locations, so "did I find everything" is answerable. Locations live in the
+-- scanner's Secrets category (on until we learn whether vanilla discovery is
+-- even viable for a blind player).
+local function announce_secrets()
+    local ma_map = require("ma_map")
+    local p = player()
+    if not p then return end
+    local doors = 0
+    for dy = -47, 47 do
+        for dx = -47, 47 do
+            if ma_map.secret_door_at(p.position.x + dx, p.position.y + dy) then
+                doors = doors + 1
+            end
+        end
+    end
+    local traps = 0
+    pcall(function()
+        local list = G_stateGame.triggerData:getAllTriggersOnLevelWithActionName(
+            G_stateGame.currentWorldName, "fnTrap")
+        for _, t in ipairs(list or {}) do
+            local root = ma_map.root(t.x, t.y)
+            if not ma_map.trap_revealed_root(root) then traps = traps + 1 end
+        end
+    end)
+    speech.say("Hidden here: " .. doors .. (doors == 1 and " door, " or " doors, ")
+        .. traps .. (traps == 1 and " trap." or " traps."), true)
+end
+
 local function announce_modes()
     local safety = G_stateGame.safetyModeOn
     local sneak = playerStats and playerStats.isSneaking
@@ -310,6 +339,7 @@ local ACTIONS = {
     position = announce_position,
     turns = announce_turns,
     modes = announce_modes,
+    secrets = announce_secrets,
     cursor_step = function(cmd) require("ma_cursor").step(cmd.dir, cmd.skip) end,
     cursor_read = function() require("ma_cursor").read() end,
     cursor_recenter = function() require("ma_cursor").recenter() end,

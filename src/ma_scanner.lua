@@ -20,11 +20,11 @@ local M = {}
 
 local SCAN_RADIUS = 40   -- tiles around the player, comfortably > the window
 
-local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "signs", "all" }
+local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "signs", "secrets", "all" }
 local CAT_NAMES = {
     visible = "Visible", monsters = "Monsters", npcs = "People",
     doors = "Doors and gates", stairs = "Stairs and exits", loot = "Loot",
-    signs = "Readables", all = "Everything",
+    signs = "Readables", secrets = "Secrets", all = "Everything",
 }
 
 local DOOR_ROOTS = {
@@ -103,11 +103,35 @@ local function build_snapshot()
         end
     end
 
+    -- Unrevealed secrets (deliberately NOT gated on remembered — hidden
+    -- things are invisible to everyone; surfacing them is the point until we
+    -- know vanilla discovery is viable by ear). Hidden traps come from the
+    -- trigger list below.
+    pcall(function()
+        local list = G_stateGame.triggerData:getAllTriggersOnLevelWithActionName(
+            G_stateGame.currentWorldName, "fnTrap")
+        for _, t in ipairs(list or {}) do
+            if not map.trap_revealed_root(map.root(t.x, t.y)) then
+                local f = trigger_feature(t.x, t.y, "hidden trap")
+                f.cat = "secrets"
+                feats[#feats + 1] = f
+            end
+        end
+    end)
+
     -- Remembered tiles: doors, stairs, loot; triggers: readables, entrances.
     local SKIP = { playerStart = true, firewall = true, tutorial = true }
     for dy = -SCAN_RADIUS, SCAN_RADIUS do
         for dx = -SCAN_RADIUS, SCAN_RADIUS do
             local x, y = px + dx, py + dy
+            if map.secret_door_at(x, y) then
+                local f = tile_feature(x, y, "secrets", "hidden door")
+                f.cat = "secrets"
+                f.name = function()
+                    return map.secret_door_at(x, y) and "hidden door" or "secret door, revealed"
+                end
+                feats[#feats + 1] = f
+            end
             if map.remembered(x, y) then
                 local root = map.root(x, y)
                 if root then
