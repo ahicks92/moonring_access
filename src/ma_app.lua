@@ -205,11 +205,18 @@ end
 
 local function announce_vitals()
     local ps = playerStats
+    local p = player()
     if not ps then return end
+    -- CURRENT values live on the player ACTOR (playerStats.poise sits stale
+    -- at max while the real poise drains in combat); maxes come from stats.
+    local function cur(field)
+        if p and type(p[field]) == "number" then return p[field] end
+        return ps[field]
+    end
     local parts = {
-        "Health " .. round(ps.health) .. " of " .. round(ps.maxHealth),
-        "poise " .. round(ps.poise) .. " of " .. round(ps.maxPoise),
-        "energy " .. round(ps.energy) .. " of " .. round(ps.maxEnergy),
+        "Health " .. round(cur("health")) .. " of " .. round(ps.maxHealth),
+        "poise " .. round(cur("poise")) .. " of " .. round(ps.maxPoise),
+        "energy " .. round(cur("energy")) .. " of " .. round(ps.maxEnergy),
         "food " .. round(ps.food) .. " of " .. round(ps.maxFood),
     }
     speech.say(table.concat(parts, ", "), true)
