@@ -123,6 +123,25 @@ function M.area_exits()
     return exits
 end
 
+-- Is this tile a walkable boundary tile (part of some exit run)? Returns the
+-- edge name(s) or nil. Cheap point query for the cursor — no run merging.
+function M.area_exit_edge_at(x, y)
+    if not G_stateGame then return nil end
+    local wd = G_stateGame.currentWorldData
+    if not wd or G_stateGame.currentWorldName == "Overworld" then return nil end
+    local minX, maxX, minY, maxY = wd.minX, wd.maxX, wd.minY, wd.maxY
+    if not (minX and maxX and minY and maxY) then return nil end
+    if x < minX or x > maxX or y < minY or y > maxY then return nil end
+    local edges = {}
+    if y == minY then edges[#edges + 1] = "north" end
+    if y == maxY then edges[#edges + 1] = "south" end
+    if x == minX then edges[#edges + 1] = "west" end
+    if x == maxX then edges[#edges + 1] = "east" end
+    if #edges == 0 then return nil end
+    if M.walkable(x, y) ~= true then return nil end
+    return table.concat(edges, " ")
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end
