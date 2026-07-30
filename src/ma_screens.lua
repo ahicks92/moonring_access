@@ -448,6 +448,34 @@ local function god_row_text(y)
     return table.concat(parts, ", ")
 end
 
+-- The god's devotional task list (the scroll column's info-pane table):
+-- { done, "1)  text ", " = cur/req", "Reward: n" } per task. Returns spoken
+-- lines plus done/total counts.
+local function god_task_lines(god)
+    local lines, done, total = {}, 0, 0
+    local ok = pcall(function()
+        local ach = G_stateGame:getAchievements()
+        for _, t in ipairs(ach.getTaskStringsForGod(god)) do
+            total = total + 1
+            if t[1] then done = done + 1 end
+            local desc = clean(tostring(t[2] or "")):gsub("%s+", " ")
+            local cur, req = tostring(t[3] or ""):match("(%d+)%s*/%s*(%d+)")
+            local progress = cur and (cur .. " of " .. req) or ""
+            local reward = clean(tostring(t[4] or ""))
+            local line = desc
+            if t[1] then
+                line = line .. ", complete"
+            else
+                if progress ~= "" then line = line .. ", " .. progress end
+                if reward ~= "" then line = line .. ". " .. reward .. " devotion" end
+            end
+            lines[#lines + 1] = line
+        end
+    end)
+    if not ok then return nil end
+    return lines, done, total
+end
+
 local function cell_state_text(tree, cell, td, x)
     if x == 1 then return nil end   -- the god head cell speaks for itself
     if cell.isOpen then return "owned" end
@@ -499,7 +527,13 @@ local gods = {
                                 end)
                                 ctx.message:fragment(clean(gd.name or god) .. ", " .. verb)
                             elseif xx == 2 then
-                                ctx.message:fragment("Devotional tasks scroll")
+                                local _, done, total = god_task_lines(god)
+                                if total and total > 0 then
+                                    ctx.message:fragment("Devotional tasks, "
+                                        .. done .. " of " .. total .. " complete")
+                                else
+                                    ctx.message:fragment("Devotional tasks scroll")
+                                end
                             else
                                 ctx.message:fragment(clean((the_td and the_td.title) or the_cell.tileDataName))
                                 local state = cell_state_text(tree, the_cell, the_td, xx)
@@ -514,6 +548,13 @@ local gods = {
                         end,
                         details = function()
                             local lines = {}
+                            if xx == 2 then
+                                local tasks, done, total = god_task_lines(god)
+                                lines[#lines + 1] = clean(gd.name or god) .. ", devotional tasks"
+                                    .. (total and (", " .. done .. " of " .. total .. " complete") or "")
+                                for _, l in ipairs(tasks or {}) do lines[#lines + 1] = l end
+                                return lines
+                            end
                             if xx == 1 then
                                 lines[#lines + 1] = clean(gd.name or god)
                                 if gd.stat then lines[#lines + 1] = clean(gd.stat) end
