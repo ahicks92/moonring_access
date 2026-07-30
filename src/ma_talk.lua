@@ -71,11 +71,17 @@ function M.install()
     end
 end
 
--- Pump watcher: speak autocomplete suggestion changes while typing.
+-- Pump watcher: speak autocomplete suggestion changes while typing, and keep
+-- the "Ask about" review buffer mirroring the seen-but-unused keyword list
+-- (numpad-free access; Ctrl+arrows reach it anywhere).
 function M.tick()
     local a = area()
     if not a or not a.isOpen then
         T.last_tag = nil
+        if T.words_key ~= nil then
+            T.words_key = nil
+            buffers.set_lines("words", {})
+        end
         return
     end
     local tag = a.currentTypedTag
@@ -84,6 +90,15 @@ function M.tick()
         speech.say(text.clean(tag), true)
     elseif tag == "" then
         T.last_tag = nil
+    end
+
+    local ok, words = pcall(a.getUnusedKeys, a)
+    if ok and type(words) == "table" then
+        local key = table.concat(words, "|")
+        if key ~= T.words_key then
+            T.words_key = key
+            buffers.set_lines("words", words)
+        end
     end
 end
 
