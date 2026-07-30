@@ -24,11 +24,12 @@ local M = {}
 -- cost is a one-frame rescan hitch at worst.
 local SCAN_RADIUS = 95
 
-local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "hazards", "signs", "secrets", "all" }
+local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "hazards", "lights", "signs", "secrets", "all" }
 local CAT_NAMES = {
     visible = "Visible", monsters = "Monsters", npcs = "People",
     doors = "Doors and gates", stairs = "Stairs and exits", loot = "Loot",
-    hazards = "Hazards", signs = "Readables", secrets = "Secrets", all = "Everything",
+    hazards = "Hazards", lights = "Lights", signs = "Readables",
+    secrets = "Secrets", all = "Everything",
 }
 
 local DOOR_ROOTS = {
@@ -176,6 +177,13 @@ local function build_snapshot()
                         feats[#feats + 1] = tile_feature(x, y, "loot", root)
                     elseif HAZARD_ROOTS[root] then
                         feats[#feats + 1] = tile_feature(x, y, "hazards", root)
+                    elseif map.light_radius_at(x, y) > 0 then
+                        -- Light-emitting cells (torches, glowing mushrooms,
+                        -- crystal lights): stealth terrain. The game's own
+                        -- lightRadius field is the authority — anything that
+                        -- would trip isNextToLight lands here. Hazards win
+                        -- the elseif so lava stays a hazard.
+                        feats[#feats + 1] = tile_feature(x, y, "lights", root)
                     end
                 end
                 if G_stateGame.triggerData and G_stateGame.currentWorldName then

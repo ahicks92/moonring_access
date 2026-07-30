@@ -313,6 +313,18 @@ function M.path_shape_text(x, y)
     return label .. " crossroads", key
 end
 
+-- Light emitted by the CELL at x,y (torches, glowing mushrooms, crystal
+-- lights...). The game's own lightRadius field — the same number
+-- isNextToLight uses for the sneak detection penalty. 0 = dark cell.
+function M.light_radius_at(x, y)
+    local map = M.game_map()
+    local mx, my = M.to_map(x, y)
+    if not map or not mx then return 0 end
+    local ok, data = pcall(map.getCellDataAtMapXYZeroIndexed, map, mx, my)
+    if not ok or not data then return 0 end
+    return tonumber(data.lightRadius) or 0
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end
