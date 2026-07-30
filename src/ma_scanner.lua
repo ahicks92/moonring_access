@@ -20,11 +20,11 @@ local M = {}
 
 local SCAN_RADIUS = 40   -- tiles around the player, comfortably > the window
 
-local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "signs", "secrets", "all" }
+local CATEGORIES = { "visible", "monsters", "npcs", "doors", "stairs", "loot", "hazards", "signs", "secrets", "all" }
 local CAT_NAMES = {
     visible = "Visible", monsters = "Monsters", npcs = "People",
     doors = "Doors and gates", stairs = "Stairs and exits", loot = "Loot",
-    signs = "Readables", secrets = "Secrets", all = "Everything",
+    hazards = "Hazards", signs = "Readables", secrets = "Secrets", all = "Everything",
 }
 
 local DOOR_ROOTS = {
@@ -41,6 +41,10 @@ local STAIR_ROOTS = {
 local LOOT_ROOTS = {
     chestClosed = true, chestLocked = true, crateClosed = true, crateHuge = true,
     barrelClosed = true, bookshelf = true,
+}
+local HAZARD_ROOTS = {
+    web = true, trapSpikesOn = true, trapSpikesOff = true, fireTrapOff = true,
+    amberTrapOn = true, amberTrapOff = true, fire = true, embers = true, lava = true,
 }
 
 -- ----------------------------------------------------------- feature kinds --
@@ -148,6 +152,8 @@ local function build_snapshot()
                         feats[#feats + 1] = tile_feature(x, y, "stairs", root)
                     elseif LOOT_ROOTS[root] then
                         feats[#feats + 1] = tile_feature(x, y, "loot", root)
+                    elseif HAZARD_ROOTS[root] then
+                        feats[#feats + 1] = tile_feature(x, y, "hazards", root)
                     end
                 end
                 if G_stateGame.triggerData and G_stateGame.currentWorldName then

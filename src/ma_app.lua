@@ -66,6 +66,9 @@ local POI_ROOTS = {
     trapdoorOpen = true, trapdoorClosed = true,
     chestClosed = true, crateClosed = true, barrelClosed = true, bookshelf = true,
     campfire = true, bed = true, throne = true, well = true,
+    -- Hazards: things that hurt or hold you.
+    web = true, trapSpikesOn = true, trapSpikesOff = true, fireTrapOff = true,
+    amberTrapOn = true, amberTrapOff = true, fire = true, embers = true, lava = true,
 }
 
 local POI_RADIUS = 12
