@@ -92,6 +92,11 @@ function M.claim(kb)
             push({ kind = "app", action = "cursor_to_target", mods = mods })
         end
         eat(kb, "tab")
+        -- Ctrl+backslash: tracked map location's relative distance.
+        if kb.justPressedDictionary["\\"] then
+            push({ kind = "app", action = "tracked_where", mods = mods })
+        end
+        eat(kb, "\\")
         -- Review buffers: Ctrl+arrows (arrows only — Ctrl+WASD left alone).
         -- Up/down step lines, left/right switch buffers. Eaten every tick so
         -- the game's auto-repeat never walks the player.

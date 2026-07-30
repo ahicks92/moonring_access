@@ -674,6 +674,7 @@ local ACTIONS = {
         end
     end,
     cursor_recenter = function() require("ma_cursor").recenter() end,
+    tracked_where = function() require("ma_screens").tracked_where() end,
     scan_entry = function(cmd) require("ma_scanner").step_entry(cmd.dir) end,
     scan_cat = function(cmd) require("ma_scanner").step_category(cmd.dir) end,
     scan_goto = function() require("ma_scanner").goto_selected() end,

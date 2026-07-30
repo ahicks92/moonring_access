@@ -12,6 +12,7 @@ local dispatcher = require("ma_dispatcher")
 local gamestate = require("library.gamestate")
 local ma_text = require("ma_text")
 local items = require("ma_items")
+local hooks = require("ma_hooks")
 
 local M = {}
 
@@ -588,6 +589,164 @@ local gods = {
     end,
 }
 
+-- -------------------------------------------------------------------- map --
+-- The map screen (M): known locations sorted by distance from the player's
+-- overworld position. Enter on a location TRACKS it; Ctrl+backslash then
+-- reads the tracked location's relative distance from anywhere. Locations
+-- come from the same data the drawn map labels use (overworldEntryPoints
+-- gated on knownLocations/seenLocations), so we never name a place the
+-- player hasn't learned about.
+
+-- The player's position in overworld coordinates: live position on the
+-- Overworld; inside a zoom/town/dungeon, the game's remembered zoom-in point
+-- or the world's own overworld tile.
+local function overworld_pos()
+    local g = G_stateGame
+    if not g then return nil end
+    local wd = g.currentWorldData
+    if wd and wd.isOverworld then
+        local p = g.actorManager and g.actorManager.player
+        if p and p.position then return p.position.x, p.position.y end
+    end
+    local o = playerStats and playerStats.overworldPositionXY
+    if o and o.x and o.x ~= 0 then return o.x, o.y end
+    if wd and wd.x then return wd.x, wd.y end
+    return nil
+end
+
+local function compass_offset(dx, dy)
+    local parts = {}
+    if dx > 0 then parts[#parts + 1] = dx .. " east"
+    elseif dx < 0 then parts[#parts + 1] = -dx .. " west" end
+    if dy > 0 then parts[#parts + 1] = dy .. " south"
+    elseif dy < 0 then parts[#parts + 1] = -dy .. " north" end
+    if #parts == 0 then return "here" end
+    return table.concat(parts, ", ")
+end
+
+local function location_status(name)
+    if playerStats.visitedLocations and playerStats.visitedLocations[name] then return "visited" end
+    if playerStats.seenLocations and playerStats.seenLocations[name] then return "seen" end
+    return "known"
+end
+
+-- Known locations sorted nearest-first: { key, name, x, y, dist, status,
+-- region }. Distances are Chebyshev (overworld steps).
+local function known_locations()
+    local list = {}
+    local g = G_stateGame
+    if not (g and g.triggerData and g.triggerData.overworldEntryPoints) then return list end
+    local px, py = overworld_pos()
+    local worldData = nil
+    pcall(function() worldData = require("world_data") end)
+    for _, v in ipairs(g.triggerData.overworldEntryPoints) do
+        local name = v.data or v.action
+        if name and name ~= "playerStart" and v.x and v.y
+            and ((playerStats.knownLocations and playerStats.knownLocations[name])
+                or (playerStats.seenLocations and playerStats.seenLocations[name])) then
+            local display, region = nil, nil
+            pcall(function()
+                local wd = worldData and worldData.getWorldDataWithName(name)
+                if wd then
+                    if wd.displayName and wd.displayName ~= "" then display = wd.displayName end
+                    region = wd.overworldRegionName
+                end
+            end)
+            display = display or tostring(name):gsub("_", " ")
+            local dist = px and math.max(math.abs(v.x - px), math.abs(v.y - py)) or 0
+            list[#list + 1] = {
+                key = name, name = clean(display), x = v.x, y = v.y,
+                dist = dist, status = location_status(name), region = region,
+                dx = px and (v.x - px) or 0, dy = py and (v.y - py) or 0,
+            }
+        end
+    end
+    table.sort(list, function(a, b)
+        if a.dist ~= b.dist then return a.dist < b.dist end
+        return a.name < b.name
+    end)
+    return list
+end
+
+function M.set_tracked(loc)
+    hooks.state.tracked = { key = loc.key, name = loc.name, x = loc.x, y = loc.y }
+end
+
+-- Ctrl+backslash: where is the tracked location from here?
+function M.tracked_where()
+    local speech = require("ma_speech")
+    local t = hooks.state.tracked
+    if not t then
+        speech.say("Nothing tracked. Press Enter on a map screen location to track it.", true)
+        return
+    end
+    if G_stateGame and tostring(G_stateGame.currentWorldName) == tostring(t.key) then
+        speech.say(t.name .. ": you are here.", true)
+        return
+    end
+    local px, py = overworld_pos()
+    if not px then
+        speech.say(t.name .. ": position unknown.", true)
+        return
+    end
+    speech.say(t.name .. ": " .. compass_offset(t.x - px, t.y - py) .. ".", true)
+end
+
+local map_screen = {
+    id = "map",
+    handler = function(self)
+        return (in_game() and G_stateGame.isMapOpen) and "active" or "inactive"
+    end,
+    announce = function(self, ctx)
+        local n = #known_locations()
+        ctx.message:fragment("Map, " .. n .. (n == 1 and " known location." or " known locations.")
+            .. " Enter tracks.")
+    end,
+    build = function(self, b)
+        if not in_game() or not G_stateGame.isMapOpen then return end
+        b:capture_input()
+        local list = known_locations()
+        if #list == 0 then
+            b:add_label(Id.structural("empty"), function(ctx)
+                ctx.message:fragment("No known locations yet.")
+            end)
+            return
+        end
+        local tracked = hooks.state.tracked
+        for i, loc in ipairs(list) do
+            local l = loc
+            b:start_row("loc" .. i)
+            b:add_item(Id.structural("loc:" .. tostring(l.key)), {
+                label = function(ctx)
+                    ctx.message:fragment(l.name)
+                    ctx.message:fragment(compass_offset(l.dx, l.dy))
+                    ctx.message:fragment(l.status)
+                    if tracked and tracked.key == l.key then ctx.message:fragment("tracked") end
+                end,
+                on_click = function(ctx)
+                    M.set_tracked(l)
+                    ctx.message:fragment("Tracking " .. l.name .. ".")
+                end,
+                details = function()
+                    local lines = { l.name }
+                    if l.region then lines[#lines + 1] = "Region: " .. clean(l.region) end
+                    lines[#lines + 1] = compass_offset(l.dx, l.dy)
+                        .. (l.dist > 0 and (", " .. l.dist .. " overworld steps") or "")
+                    lines[#lines + 1] = l.status
+                    pcall(function()
+                        local vision = G_Globals.hengeToDescription[l.key]
+                        if vision and playerStats.seenLocations[l.key] then
+                            lines[#lines + 1] = clean(vision)
+                        end
+                    end)
+                    return lines
+                end,
+            })
+            b:end_row()
+        end
+    end,
+}
+
 -- Registered from ma_overlays.register_all between inventory and the modal
 -- stack, so game modals (multi-choice, confirm, number box, alerts) opened
 -- FROM these screens sit above them.
@@ -596,6 +755,7 @@ function M.register()
     dispatcher.register(buy)
     dispatcher.register(sell)
     dispatcher.register(gods)
+    dispatcher.register(map_screen)
 end
 
 return M
