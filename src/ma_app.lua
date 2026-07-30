@@ -133,6 +133,8 @@ end
 -- nearest first.
 local function announce_pois()
     local found = {}
+    local on_overworld = G_stateGame
+        and tostring(G_stateGame.currentWorldName) == "Overworld"
     each_gated_tile("visible", function(x, y, dx, dy, root)
         local things, merged = require("ma_map").tile_things(x, y)
         if not merged and root and POI_ROOTS[root] then
@@ -141,6 +143,14 @@ local function announce_pois()
         end
         for _, tn in ipairs(things) do
             found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
+        end
+        -- Overworld gatherables: the herb/berry/kindling icons sighted
+        -- players see scattered on the world map.
+        if on_overworld then
+            for _, tn in ipairs(require("ma_map").gatherables_at(x, y)) do
+                found[#found + 1] = { d = text.dist(dx, dy),
+                    s = tn .. ", " .. text.offset(dx, dy) }
+            end
         end
     end)
     pcall(function()
@@ -179,6 +189,15 @@ local function announce_pois()
             sleathen_alive = not G_stateGame.speechArea:isPropertyNonZero("killed_sleathen")
         end)
         if sleathen_alive then prey_spot(playerStats.sleathen) end
+        -- Fish ripples, same on-screen-ish range as the sweep.
+        if playerStats.isFishPresent then
+            local dx = playerStats.fishPositionX - p.position.x
+            local dy = playerStats.fishPositionY - p.position.y
+            if math.max(math.abs(dx), math.abs(dy)) <= POI_RADIUS then
+                found[#found + 1] = { d = text.dist(dx, dy),
+                    s = "water ripples, " .. text.offset(dx, dy) }
+            end
+        end
     end)
 
     if #found == 0 then

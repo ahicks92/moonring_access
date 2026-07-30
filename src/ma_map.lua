@@ -210,22 +210,31 @@ end
 -- predicates; prey prints while the player is within the game's print
 -- range; the fish ripple). Used by the exploration cursor so arrowing the
 -- world map reads what the icons show.
-function M.overworld_icons_at(x, y)
+local GATHER = {
+    { fn = "isHerbAtWorldXY", name = "herb" },
+    { fn = "isBerryAtWorldXY", name = "berries" },
+    { fn = "isKindlingAtWorldXY", name = "kindling" },
+    { fn = "isTearAtWorldXY", name = "something odd" },
+    { fn = "isWitchesHerbAtWorldXY", name = "strange plant" },
+}
+
+-- Gatherable icons (herbs, berries, kindling...) at an Overworld tile, via
+-- the game's own predicates. Empty list off the Overworld.
+function M.gatherables_at(x, y)
     local names = {}
     if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return names end
-    local GATHER = {
-        { fn = "isHerbAtWorldXY", name = "herb" },
-        { fn = "isBerryAtWorldXY", name = "berries" },
-        { fn = "isKindlingAtWorldXY", name = "kindling" },
-        { fn = "isTearAtWorldXY", name = "something odd" },
-        { fn = "isWitchesHerbAtWorldXY", name = "strange plant" },
-    }
     for _, g in ipairs(GATHER) do
         if type(G_stateGame[g.fn]) == "function" then
             local ok, hit = pcall(G_stateGame[g.fn], G_stateGame, x, y)
             if ok and hit then names[#names + 1] = g.name end
         end
     end
+    return names
+end
+
+function M.overworld_icons_at(x, y)
+    if not G_stateGame or tostring(G_stateGame.currentWorldName) ~= "Overworld" then return {} end
+    local names = M.gatherables_at(x, y)
     pcall(function()
         local p = M.player()
         local range = (G_Globals and G_Globals.huntDetectionDistanceWolf) or 8
