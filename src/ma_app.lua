@@ -115,7 +115,8 @@ local function trigger_names_at(x, y)
     return names
 end
 
--- Ctrl+H: points of interest — interesting roots + triggers, nearest first.
+-- Ctrl+H: points of interest — interesting roots + triggers + area exits,
+-- nearest first.
 local function announce_pois()
     local found = {}
     each_remembered_tile(function(x, y, dx, dy, root)
@@ -125,6 +126,23 @@ local function announce_pois()
         end
         for _, tn in ipairs(trigger_names_at(x, y)) do
             found[#found + 1] = { d = text.dist(dx, dy), s = tn .. ", " .. text.offset(dx, dy) }
+        end
+    end)
+    pcall(function()
+        local ma_map = require("ma_map")
+        local p = player()
+        for _, e in ipairs(ma_map.area_exits()) do
+            local known = false
+            for _, t in ipairs(e.tiles) do
+                if ma_map.remembered(t.x, t.y) then known = true break end
+            end
+            if known then
+                local dx, dy = e.x - p.position.x, e.y - p.position.y
+                found[#found + 1] = { d = text.dist(dx, dy),
+                    s = "area exit " .. e.edge
+                        .. (e.width > 1 and (", " .. e.width .. " wide") or "")
+                        .. ", " .. text.offset(dx, dy) }
+            end
         end
     end)
     if #found == 0 then
