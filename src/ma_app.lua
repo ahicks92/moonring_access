@@ -324,7 +324,7 @@ function M.install()
             local p = player()
             local t = p and p.target
             if not t then
-                speech.say("No target.", true)
+                speech.say("Target cleared.", true)
                 return
             end
             local ok, name = pcall(t.getDisplayName, t)
