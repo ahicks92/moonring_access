@@ -53,10 +53,13 @@ local function vis_class(x, y)
 end
 
 -- The differential key of a tile: what must change for a step to speak.
+-- Path shape is part of the key, so skip-stepping a road stops at corners,
+-- junctions, and ends — Shift+arrow follows the road to its next decision.
 local function tile_key(x, y)
     local vis = vis_class(x, y)
     if vis == "unexplored" then return "unexplored" end
-    return tostring(map.root(x, y)) .. "|" .. vis
+    local _, shape_key = map.path_shape_text(x, y)
+    return tostring(map.root(x, y)) .. "|" .. tostring(shape_key) .. "|" .. vis
 end
 
 local function triggers_at(x, y)
@@ -114,13 +117,18 @@ local function describe(x, y, full)
     end
 
     -- Object tiles merge root + triggers into one name ("Chest (locked)");
-    -- other tiles speak the plain root, with trigger names as extras below.
+    -- path tiles speak their shape ("Path corner, north and east"); other
+    -- tiles speak the plain root, with trigger names as extras below.
     local root = map.root(x, y)
     local things, merged = map.tile_things(x, y)
-    if full or root ~= C.last_root then
-        parts[#parts + 1] = merged and things[1] or map.root_name(root)
+    local shape_text, shape_key = map.path_shape_text(x, y)
+    if full or root ~= C.last_root or shape_key ~= C.last_pathkey then
+        if merged then parts[#parts + 1] = things[1]
+        elseif shape_text then parts[#parts + 1] = shape_text
+        else parts[#parts + 1] = map.root_name(root) end
     end
     C.last_root = root
+    C.last_pathkey = shape_key
 
     local occupant = map.creature_at(x, y)
     if occupant then

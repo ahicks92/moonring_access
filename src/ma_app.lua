@@ -556,11 +556,24 @@ function M.watch_tick()
     local parts = {}
     local ok, root = pcall(p.getCurrentTileRoot, p)
     root = ok and root or nil
-    if root ~= W.root then
-        W.root = root
+    local root_changed = root ~= W.root
+    W.root = root
+    -- Path tiles speak their SHAPE (Factorio Access pipe logic). Stepping
+    -- ONTO a road announces whatever shape is underfoot; while following
+    -- it, only decision points speak (corner, T, crossroads, end) —
+    -- straight runs stay silent, even right after a bend.
+    local shape_text, shape_key = nil, nil
+    pcall(function() shape_text, shape_key = require("ma_map").path_shape_text(x, y) end)
+    if shape_text then
+        local is_straight = shape_key == "path:ns" or shape_key == "path:ew"
+        if root_changed or (shape_key ~= W.path_key and not is_straight) then
+            parts[#parts + 1] = shape_text
+        end
+    elseif root_changed then
         local named = root and not BORING_ROOTS[root] and root_name(root) or nil
         if named then parts[#parts + 1] = named end
     end
+    W.path_key = shape_key
     for _, tn in ipairs(trigger_names_at(x, y)) do
         parts[#parts + 1] = tn
     end

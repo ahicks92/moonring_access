@@ -268,6 +268,51 @@ function M.area_exit_edge_at(x, y)
     return table.concat(edges, " ")
 end
 
+-- Path shape naming (Factorio Access's pipe/network shape logic, compass
+-- wording): a path tile is described by which cardinal neighbors are also
+-- path — end / straight / corner / T / crossroads. Returns (text, key):
+-- text is the spoken name ("Path corner, north and east"), key a stable
+-- differential token so walkers and the cursor speak only shape CHANGES —
+-- following a road is silent until it bends, branches, or ends.
+local PATH_ROOTS = { path = true, bridge = true }
+
+function M.path_shape_text(x, y)
+    local root = M.root(x, y)
+    if not root or not PATH_ROOTS[root] then return nil end
+    local label = root == "bridge" and "Bridge" or "Path"
+    local n = PATH_ROOTS[M.root(x, y - 1)] or false
+    local s = PATH_ROOTS[M.root(x, y + 1)] or false
+    local e = PATH_ROOTS[M.root(x + 1, y)] or false
+    local w = PATH_ROOTS[M.root(x - 1, y)] or false
+
+    local key = "path:" .. (n and "n" or "") .. (e and "e" or "")
+        .. (s and "s" or "") .. (w and "w" or "")
+    local dirs = {}
+    if n then dirs[#dirs + 1] = "north" end
+    if e then dirs[#dirs + 1] = "east" end
+    if s then dirs[#dirs + 1] = "south" end
+    if w then dirs[#dirs + 1] = "west" end
+
+    local count = #dirs
+    if count == 0 then return label .. ", isolated", key end
+    if count == 1 then return label .. " end, continues " .. dirs[1], key end
+    if count == 2 then
+        if n and s then return label .. ", north to south", key end
+        if e and w then return label .. ", east to west", key end
+        return label .. " corner, " .. dirs[1] .. " and " .. dirs[2], key
+    end
+    if count == 3 then
+        local axis, branch
+        if n and s then
+            axis, branch = "north to south", (e and "east" or "west")
+        else
+            axis, branch = "east to west", (n and "north" or "south")
+        end
+        return label .. " T, " .. axis .. ", branch " .. branch, key
+    end
+    return label .. " crossroads", key
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end
