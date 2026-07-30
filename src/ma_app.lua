@@ -249,6 +249,56 @@ function M.watch_tick()
     pcall(function() require("ma_echo").on_move() end)
 end
 
+-- --------------------------------------------------------- reveal watchers --
+-- Sighted players get a white flash ON the revealed tile; the game's own log
+-- line ("You spot a secret door!") says what but never where. Wrap the two
+-- perception-reveal checks to speak the location.
+
+local function offset_from_player_map_xy(mx, my)
+    local p = player()
+    if not p then return nil end
+    local map = G_stateGame.map
+    local ok, pmx, pmy = pcall(map.convertWorldXYToMapXYZeroIndexed, map, p.position.x, p.position.y)
+    if not ok or not pmx then return nil end
+    return text.offset(mx - pmx, my - pmy)
+end
+
+function M.install()
+    hooks.wrap(G_stateGame, "checkForSecretDoorAtMapXYZeroIndexed", function(orig, self, x, y, guaranteed)
+        local was_secret = false
+        pcall(function()
+            local data = self.map:getCellDataAtMapXYZeroIndexed(x, y)
+            was_secret = (data and CCellData.cellIsSecretDoor[data.name]) and true or false
+        end)
+        local r = orig(self, x, y, guaranteed)
+        if was_secret then
+            pcall(function()
+                local data = self.map:getCellDataAtMapXYZeroIndexed(x, y)
+                if not (data and CCellData.cellIsSecretDoor[data.name]) then
+                    local where = offset_from_player_map_xy(x, y)
+                    if where then speech.say("Secret door " .. where .. ".", false) end
+                end
+            end)
+        end
+        return r
+    end)
+
+    hooks.wrap(G_stateGame, "checkForTrapAtMapXYZeroIndexed", function(orig, self, x, y, guaranteed)
+        local before
+        pcall(function() before = self.map:getRootAtMapXYZeroIndexed(x, y) end)
+        local r = orig(self, x, y, guaranteed)
+        pcall(function()
+            local after = self.map:getRootAtMapXYZeroIndexed(x, y)
+            if r and after ~= before then
+                local where = offset_from_player_map_xy(x, y)
+                local name = root_name(after) or "a trap"
+                if where then speech.say(name .. " spotted " .. where .. ".", false) end
+            end
+        end)
+        return r
+    end)
+end
+
 -- --------------------------------------------------------------- dispatch --
 
 local ACTIONS = {

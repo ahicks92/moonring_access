@@ -200,6 +200,10 @@ function M.boot()
         if G_stateGame then require("ma_talk").install() end
     end)
 
+    stage("reveal hooks", function()
+        if G_stateGame then require("ma_app").install() end
+    end)
+
     stage("mute", function()
         -- MOONRING_ACCESS_MUTE mutes the GAME too, not just mod speech: test
         -- runs must not play music/sfx over the developer's screen reader.
