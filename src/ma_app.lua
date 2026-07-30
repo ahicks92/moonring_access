@@ -272,6 +272,12 @@ local ACTIONS = {
         speech.say("Wall echo " .. (on and "on." or "off."), true)
     end,
     talk_status = function() require("ma_talk").status() end,
+    tune_toggle = function()
+        local hs = require("ma_hooks").state
+        hs.tuning_open = not hs.tuning_open
+        if not hs.tuning_open then speech.say("Tuning closed.", true) end
+        -- Opening announces itself through the overlay dispatcher.
+    end,
     steps_toggle = function()
         W.steps_enabled = (W.steps_enabled == false)
         speech.say("Step sounds " .. (W.steps_enabled ~= false and "on." or "off."), true)

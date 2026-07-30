@@ -41,12 +41,76 @@ local WALL = {
     warmup_samples = 128,
     noise_seed = 12345,
 }
-WALL.tone_seconds = WALL.attack + WALL.decay + WALL.sustain + WALL.release
-WALL.up_hz = WALL.base_hz * math.pow(2, WALL.vertical_semitones / 12)
-WALL.down_hz = WALL.base_hz * math.pow(2, -WALL.vertical_semitones / 12)
+WALL.itd_ms = 0.7                   -- far-ear delay at |pan| = 1, milliseconds
 
-local MAX_ITD = 0.0007              -- seconds far-ear delay at |pan| = 1
 local ALLPASS_FLUSH = 32            -- frames of ringout tail
+local TUNING_FILE = "moonring_access_tuning.lua"
+
+local function refresh_derived()
+    WALL.tone_seconds = WALL.attack + WALL.decay + WALL.sustain + WALL.release
+    WALL.up_hz = WALL.base_hz * math.pow(2, WALL.vertical_semitones / 12)
+    WALL.down_hz = WALL.base_hz * math.pow(2, -WALL.vertical_semitones / 12)
+end
+
+-- Apply persisted tuning over the defaults (file survives restarts; the
+-- in-memory override table survives /reload).
+S.tuning = S.tuning or (function()
+    local ok, chunk = pcall(love.filesystem.load, TUNING_FILE)
+    if ok and chunk then
+        local ok2, t = pcall(chunk)
+        if ok2 and type(t) == "table" then return t end
+    end
+    return {}
+end)()
+for k, v in pairs(S.tuning) do WALL[k] = v end
+refresh_derived()
+
+-- Parameters exposed to the live tuning menu. Pool-shaping params invalidate
+-- the noise pools on change.
+local TUNABLE = {
+    { key = "initial_volume", label = "Wall volume", min = 0.1, max = 2.0, step = 0.05 },
+    { key = "itd_ms", label = "Ear delay milliseconds", min = 0, max = 2.5, step = 0.1 },
+    { key = "ms_per_tile", label = "Delay per tile", min = 10, max = 100, step = 5 },
+    { key = "db_per_tile", label = "Decibels per tile", min = -8, max = -1, step = 0.5 },
+    { key = "q", label = "Tone purity Q", min = 5, max = 80, step = 5, pools = true },
+    { key = "vertical_semitones", label = "Vertical interval semitones", min = 2, max = 12, step = 1, pools = true },
+    { key = "down_gain", label = "South loudness", min = 0.5, max = 2.5, step = 0.1 },
+    { key = "up_gain", label = "North loudness", min = 0.5, max = 2.5, step = 0.1 },
+    { key = "horizontal_gain", label = "Side loudness", min = 0.5, max = 2.5, step = 0.1 },
+}
+
+function M.tuning_params() return TUNABLE end
+
+function M.get_tuning(key) return WALL[key] end
+
+function M.set_tuning(key, value)
+    for _, p in ipairs(TUNABLE) do
+        if p.key == key then
+            value = math.max(p.min, math.min(p.max, value))
+            WALL[key] = value
+            S.tuning[key] = value
+            refresh_derived()
+            if p.pools then S.pools = {} end
+            return value
+        end
+    end
+end
+
+function M.save_tuning()
+    local parts = { "return {" }
+    for k, v in pairs(S.tuning) do
+        parts[#parts + 1] = string.format("  %s = %s,", k, tostring(v))
+    end
+    parts[#parts + 1] = "}"
+    local ok = pcall(love.filesystem.write, TUNING_FILE, table.concat(parts, "\n"))
+    return ok
+end
+
+-- Reference pattern for tuning by ear: equidistant side walls (the pan/ITD
+-- acid test) plus a vertical pair.
+function M.demo()
+    M.play_walls({ left = 2, right = 2, up = 4, down = 4 })
+end
 
 -- ============================ DSP primitives ================================
 
@@ -145,7 +209,8 @@ local function render_placements(placements)
         if frames > total then total = frames end
     end
     if total == 0 then return nil end
-    local padding = math.ceil(MAX_ITD * RATE) + ALLPASS_FLUSH
+    local max_itd = WALL.itd_ms / 1000
+    local padding = math.ceil(max_itd * RATE) + ALLPASS_FLUSH
     local n = total + padding
     local left, right = {}, {}
     for i = 0, n - 1 do left[i] = 0; right[i] = 0 end
@@ -159,7 +224,7 @@ local function render_placements(placements)
 
         -- ITD split: integer shift + allpass fractional remainder, with the
         -- fraction held in [0.5, 1.5) so the allpass pole stays tame.
-        local delay_samples = math.abs(pan) * MAX_ITD * RATE
+        local delay_samples = math.abs(pan) * max_itd * RATE
         local int_delay, ap_a, ap_x, ap_y = 0, nil, 0, 0
         if delay_samples >= 0.5 then
             int_delay = math.floor(delay_samples - 0.5)

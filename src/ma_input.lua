@@ -108,6 +108,14 @@ function M.claim(kb)
         end
         for _, k in ipairs(CONFIRM_KEYS) do eat(kb, k) end
         eat(kb, "space")
+        -- Escape belongs to the game EXCEPT over our own mod screens, which
+        -- have no game widget behind them to close.
+        if require("ma_hooks").state.tuning_open then
+            if kb.justPressedDictionary["escape"] then
+                push({ kind = "app", action = "tune_toggle", mods = mods })
+            end
+            eat(kb, "escape")
+        end
     end
 
     -- Review buffers, any context: Ctrl+arrows (arrows only — Ctrl+WASD left
@@ -138,7 +146,7 @@ function M.claim(kb)
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
             t = "turns", q = "modes", e = "echo_toggle", c = "character",
-            f = "steps_toggle",
+            f = "steps_toggle", w = "tune_toggle",
         }
         if mods.ctrl then
             for letter, action in pairs(CHORDS) do

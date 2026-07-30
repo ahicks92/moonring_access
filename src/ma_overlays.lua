@@ -407,6 +407,63 @@ local title_idle = {
     end,
 }
 
+-- ------------------------------------------------------------ tuning menu --
+-- A MOD-NATIVE screen (no game widget behind it): live wall-echo tuning.
+-- Up/down picks a parameter, left/right adjusts (Shift = 5x step), every
+-- change replays the reference pattern. Ctrl+W or Escape closes; Save writes
+-- the values to moonring_access_tuning.lua, which loads at every boot.
+local tuning = {
+    id = "tuning",
+    handler = function(self)
+        return hooks.state.tuning_open and "active" or "inactive"
+    end,
+    announce = function(self, ctx)
+        ctx.message:fragment("Wall echo tuning. Left and right adjust, shift for big steps. Every change replays the test pattern.")
+    end,
+    build = function(self, b)
+        if not hooks.state.tuning_open then return end
+        b:capture_input()
+        local synth = require("ma_synth")
+        for _, p in ipairs(synth.tuning_params()) do
+            local param = p
+            b:start_row(param.key)
+            b:add_item(Id.structural("tune:" .. param.key), {
+                label = function(ctx)
+                    ctx.message:fragment(param.label)
+                    ctx.message:fragment(tostring(synth.get_tuning(param.key)))
+                end,
+                on_click = function(ctx)
+                    synth.demo()
+                end,
+                on_horizontal_adjust = function(ctx, sign, large)
+                    local step = param.step * (large and 5 or 1)
+                    local v = synth.set_tuning(param.key, synth.get_tuning(param.key) + sign * step)
+                    ctx.message:fragment(tostring(v))
+                    synth.demo()
+                end,
+            })
+            b:end_row()
+        end
+        b:start_row("save")
+        b:add_item(Id.structural("tune:save"), {
+            label = function(ctx) ctx.message:fragment("Save tuning") end,
+            on_click = function(ctx)
+                local ok = require("ma_synth").save_tuning()
+                ctx.message:fragment(ok and "Saved." or "Save failed.")
+            end,
+        })
+        b:end_row()
+        b:start_row("close")
+        b:add_item(Id.structural("tune:close"), {
+            label = function(ctx) ctx.message:fragment("Close") end,
+            on_click = function(ctx)
+                hooks.state.tuning_open = false
+            end,
+        })
+        b:end_row()
+    end,
+}
+
 -- Bottom-to-top: the topmost open modal wins, mirroring getUIInput order.
 function M.register_all()
     dispatcher.register(title_idle)
@@ -418,6 +475,7 @@ function M.register_all()
     dispatcher.register(text_input)
     dispatcher.register(tutorial)
     dispatcher.register(alert)
+    dispatcher.register(tuning)   -- topmost: a mod screen outranks game modals
 end
 
 return M
