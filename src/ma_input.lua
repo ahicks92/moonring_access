@@ -156,11 +156,14 @@ function M.claim(kb)
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
             t = "turns", q = "modes", e = "echo_toggle", c = "character",
-            f = "steps_toggle", w = "tune_toggle", s = "secrets",
+            f = "steps_toggle", w = "tune_toggle",
+            -- s: Ctrl+S statuses, Ctrl+Shift+S secrets (resolved below)
+            s = "statuses",
         }
         if mods.ctrl then
             for letter, action in pairs(CHORDS) do
                 if kb.justPressedDictionary[letter] then
+                    if letter == "s" and mods.shift then action = "secrets" end
                     push({ kind = "app", action = action, mods = mods })
                 end
                 eat(kb, letter)   -- held state too (same auto-repeat leak)

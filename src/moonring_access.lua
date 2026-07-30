@@ -109,6 +109,7 @@ function M.pump(dt)
         st.pending_say = {}
     end
     pcall(app.watch_tick)
+    pcall(app.status_tick)
 
     -- Spatial-tool housekeeping: cursor follow (per game turn), scanner
     -- world-change invalidation, finished-Source pruning; conversation

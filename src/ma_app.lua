@@ -255,6 +255,67 @@ local function announce_secrets()
         .. traps .. (traps == 1 and " trap." or " traps."), true)
 end
 
+-- Status effects: each accumulates 0..1 on the player (the icon bar); at 1
+-- the active flag flips (isRotting etc.). Spoken names per status key.
+local STATUS_NAMES = {
+    rot = "rot", mad = "madness", stun = "stun", torpor = "torpor",
+    blind = "blindness", bleed = "bleeding", flame = "flame",
+    poison = "poison", wet = "wet", oily = "oily", negation = "negation",
+    deafness = "deafness", vulnerable = "vulnerable", grappled = "grappled",
+    deathly = "deathly", frenzy = "frenzy",
+}
+
+-- Ctrl+S: the status bar, on demand — active effects first, then building.
+local function announce_statuses()
+    local p = player()
+    if not p then return end
+    local active, building = {}, {}
+    for _, key in ipairs(G_Globals.statuses or {}) do
+        local flag = G_Globals.statusNameToStatus[key]
+        local name = STATUS_NAMES[key] or key
+        if flag and p[flag] then
+            active[#active + 1] = name
+        elseif type(p[key]) == "number" and p[key] > 0 then
+            building[#building + 1] = name .. " " .. math.floor(p[key] * 100 + 0.5) .. " percent"
+        end
+    end
+    local parts = {}
+    if #active > 0 then parts[#parts + 1] = "Active: " .. table.concat(active, ", ") end
+    if #building > 0 then parts[#parts + 1] = "Building: " .. table.concat(building, ", ") end
+    if #parts == 0 then parts[1] = "No status effects." end
+    speech.say(table.concat(parts, ". ") .. ".", true)
+end
+
+-- Per-frame watcher: announce activations, endings, and upward quarter-band
+-- changes while a bar is building (the "watch the bar" information; falls
+-- stay quiet, full drain announces once).
+function M.status_tick()
+    local p = player()
+    if not p then W.status = nil; return end
+    W.status = W.status or {}
+    for _, key in ipairs(G_Globals.statuses or {}) do
+        local flag = G_Globals.statusNameToStatus[key]
+        local name = STATUS_NAMES[key] or key
+        local st = W.status[key]
+        if not st then st = { band = 0, active = false }; W.status[key] = st end
+
+        local is_active = (flag and p[flag]) and true or false
+        if is_active ~= st.active then
+            st.active = is_active
+            speech.say(is_active and (name .. " has taken hold!") or (name .. " over."), false)
+        end
+
+        local v = type(p[key]) == "number" and p[key] or 0
+        local band = is_active and 0 or math.floor(math.min(v, 0.99) * 4)   -- 0..3 quarters
+        if band > st.band then
+            speech.say(name .. " rising, " .. math.floor(v * 100 + 0.5) .. " percent.", false)
+        elseif st.band > 0 and v <= 0 and not is_active then
+            speech.say(name .. " faded.", false)
+        end
+        st.band = v > 0 and band or 0
+    end
+end
+
 local function announce_modes()
     local safety = G_stateGame.safetyModeOn
     local sneak = playerStats and playerStats.isSneaking
@@ -468,6 +529,7 @@ local ACTIONS = {
     turns = announce_turns,
     modes = announce_modes,
     secrets = announce_secrets,
+    statuses = announce_statuses,
     cursor_step = function(cmd) require("ma_cursor").step(cmd.dir, cmd.skip) end,
     cursor_read = function() require("ma_cursor").read() end,
     cursor_to_target = function()
