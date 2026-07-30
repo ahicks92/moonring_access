@@ -187,12 +187,7 @@ local function build_snapshot()
                                 a = nil
                             end
                             if a == "object" then
-                                -- Ground pickups (berries, dropped items):
-                                -- named from their object type, filed Loot.
-                                local f = trigger_feature(x, y, map.object_name(t.data) or "item")
-                                f.cat = "loot"
-                                feats[#feats + 1] = f
-                                a = nil
+                                a = nil   -- handled level-wide below, fog-exempt
                             end
                             if a == "read" then
                                 feats[#feats + 1] = trigger_feature(x, y, "something readable")
@@ -211,6 +206,21 @@ local function build_snapshot()
             end
         end
     end
+
+    -- Ground pickups ("object" triggers: berries, herbs, dropped items),
+    -- level-wide and FOG-EXEMPT: when an overworld icon advertises the
+    -- area's contents, quartering a scrub tile-by-tile to make the pickup
+    -- "known" is asymmetric busywork a sighted sweep doesn't pay. Named
+    -- from their object type, filed Loot.
+    pcall(function()
+        local list = G_stateGame.triggerData:getAllTriggersOnLevelWithActionName(
+            G_stateGame.currentWorldName, "object")
+        for _, t in ipairs(list or {}) do
+            local f = trigger_feature(t.x, t.y, map.object_name(t.data) or "item")
+            f.cat = "loot"
+            feats[#feats + 1] = f
+        end
+    end)
 
     -- Merged area exits (anchored at their interior-connected tile), where
     -- at least one run tile has been explored.
