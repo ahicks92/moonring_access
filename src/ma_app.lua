@@ -57,7 +57,7 @@ local function announce_hostiles()
         return
     end
     table.sort(found, function(a, b) return a.d < b.d end)
-    local m = MB.new():fragment(text.plural(#found, "hostile") .. ":")
+    local m = MB.new()
     for i = 1, math.min(#found, 10) do m:sentence(found[i].s) end
     speech.say(m, true)
 end
@@ -115,7 +115,8 @@ local function trigger_names_at(x, y)
     -- Non-informative internal trigger actions a player never interacts with.
     local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true,
         fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
-        fnYellDouseAltar = true }
+        fnYellDouseAltar = true,
+        teleportPosition = true, fallPosition = true }
     for _, t in ipairs(list) do
         local action = t and t.action
         if action == "read" then
@@ -247,7 +248,7 @@ local function announce_terrain()
         return
     end
     table.sort(list, function(a, b) return a.d < b.d end)
-    local m = MB.new():fragment("Terrain:")
+    local m = MB.new()
     for i = 1, math.min(#list, 8) do m:sentence(list[i].s) end
     speech.say(m, true)
 end

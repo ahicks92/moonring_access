@@ -73,7 +73,8 @@ local function triggers_at(x, y)
     if not ok or type(list) ~= "table" then return names end
     local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true,
         fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
-        fnYellDouseAltar = true }
+        fnYellDouseAltar = true,
+        teleportPosition = true, fallPosition = true }
     for _, t in ipairs(list) do
         local a = t and t.action
         if a == "read" then names[#names + 1] = "something readable"

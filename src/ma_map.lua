@@ -205,9 +205,12 @@ local OBJECT_ROOTS = {
 -- fn* are cell-function triggers: the root already announces the thing
 -- (stairs, teleporter, altar) — and fnTrap is a HIDDEN trap, which sighted
 -- players cannot see (the trap-spotted watcher announces reveals).
+-- teleportPosition/fallPosition are the generator's invisible destination
+-- markers (teleport/spawn/fall landing pool) — never shown to anyone.
 local SKIP_ACTIONS = { playerStart = true, firewall = true, tutorial = true, mon = true,
     fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
-    fnYellDouseAltar = true }
+    fnYellDouseAltar = true,
+    teleportPosition = true, fallPosition = true }
 
 -- Display name for an object TYPE string (trigger data fields, ground
 -- pickups). The visible pickup IS the object, so naming it is parity.

@@ -157,7 +157,8 @@ local function build_snapshot()
     -- Remembered tiles: doors, stairs, loot; triggers: readables, entrances.
     local SKIP = { playerStart = true, firewall = true, tutorial = true, mon = true,
         fnUp = true, fnDown = true, fnTeleport = true, fnTrap = true,
-        fnYellDouseAltar = true }
+        fnYellDouseAltar = true,
+        teleportPosition = true, fallPosition = true }
     for dy = -SCAN_RADIUS, SCAN_RADIUS do
         for dx = -SCAN_RADIUS, SCAN_RADIUS do
             local x, y = px + dx, py + dy
