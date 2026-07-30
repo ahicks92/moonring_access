@@ -546,6 +546,33 @@ local tuning = {
     end,
 }
 
+-- ------------------------------------------------------------------- death --
+-- The game-over screen: "You Died" art, the cause string, and a reload
+-- prompt — all visual. Announce-only: the game keeps Enter/Space (its
+-- handler resets the run and raises the respawn alert, which we voice).
+local death = {
+    id = "death",
+    handler = function(self)
+        local ok, cur = pcall(gamestate.current)
+        return (ok and cur == G_stateGame and G_stateGame.isGameOver) and "active" or "inactive"
+    end,
+    sub_identity = function(self)
+        return tostring(G_stateGame and G_stateGame.deathCauseString)
+    end,
+    build = function(self, b)
+        if not G_stateGame or not G_stateGame.isGameOver then return end
+        b:add_label(Id.structural("death"), function(ctx)
+            ctx.message:fragment("You died.")
+            ctx.message:fragment(clean(G_stateGame.deathCauseString))
+            if playerStats and playerStats.permadeath then
+                ctx.message:fragment("Press Enter to restart your quest.")
+            else
+                ctx.message:fragment("Press Enter to reload your last autosave.")
+            end
+        end)
+    end,
+}
+
 -- Bottom-to-top: the topmost open modal wins, mirroring getUIInput order.
 function M.register_all()
     dispatcher.register(title_idle)
@@ -558,6 +585,7 @@ function M.register_all()
     dispatcher.register(text_input)
     dispatcher.register(tutorial)
     dispatcher.register(alert)
+    dispatcher.register(death)    -- death outranks lingering modals
     dispatcher.register(tuning)   -- topmost: a mod screen outranks game modals
 end
 
