@@ -544,11 +544,12 @@ local function announce_modes()
         :list_item("Safety " .. (safety and "on" or "off"))
         :list_item("quiet " .. (sneak and "on" or "off"))
     -- Sight radii belong here: quiet mode dims the ward, costing a tile of
-    -- both. "sight" = line of sight; "lit" = the remember/explore radius.
+    -- both. "lit" = the remember/explore radius (the one that matters);
+    -- "sight" = raw line of sight.
     pcall(function()
-        m:list_item("sight " .. math.floor(G_stateGame.playerViewDistance))
         m:list_item("lit " .. math.floor(math.min(G_stateGame.lightDistance,
             G_stateGame.playerViewDistance)))
+        m:list_item("sight " .. math.floor(G_stateGame.playerViewDistance))
     end)
     speech.say(m, true)
 end
