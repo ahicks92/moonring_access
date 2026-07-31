@@ -94,7 +94,8 @@ The game's map key (M) opens two different mod screens:
 - Entity radar: each step sweeps visible creatures left to right as tone
   pairs (from Tanglebeep) — a fixed reference tone, then a second whose
   pitch interval says how far north (up) or south (down), panned to their
-  side. Hostiles buzz (square wave); people and animals are pure tones.
+  side. Hostiles are the reedier triangle voice; people and animals are
+  pure sine tones.
 
 ## Automatic speech
 

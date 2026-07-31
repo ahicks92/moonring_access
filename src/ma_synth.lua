@@ -568,8 +568,13 @@ local ROOT_TO_FAMILY = {
 -- north = up — the reference exists solely to make the interval legible).
 -- Pan = dx/8, constant-power + ITD. Deliberately no distance gain falloff:
 -- distance reads from pan magnitude and interval size (ScanCue.cs).
--- Timbre is the class channel: hostiles SQUARE (odd-harmonic buzz),
--- everyone else SINE.
+-- Timbre is the class channel: hostiles are Tanglebeep's actual radar
+-- voice, the TRIANGLE (TriangleGrain.cs — odd harmonics at 1/n^2, "brighter,
+-- reedier than sine, firmer image"); everyone else a pure SINE. A first cut
+-- used a square series for hostiles — far harsher than anything Tanglebeep
+-- plays. Attack is 4 ms, not ScanCue's 1 ms: their near-zero attack is an
+-- acknowledged compromise for percussive .wav pings sharing the envelope,
+-- and its onset click is pure harshness on synthesized tones.
 local RADAR = {
     ref_hz = 440.0,
     semitones_per_tile = 1.3,
@@ -577,29 +582,28 @@ local RADAR = {
     gap = 0.04,          -- reference -> second grain
     interval = 0.2,      -- entity -> entity spacing in the sweep
     vol = 0.2,
-    attack = 0.001, decay = 0.020, sustain = 0.040, release = 0.015,
+    attack = 0.004, decay = 0.020, sustain = 0.040, release = 0.015,
     sustain_level = 0.8,
     max_entities = 10,   -- bounds render cost; a longer sweep than 2 s is
                          -- stale before it finishes anyway
 }
 RADAR.tone_seconds = RADAR.attack + RADAR.decay + RADAR.sustain + RADAR.release
 
-local function radar_grain(freq, square)
-    local step = 2 * math.pi * freq / RATE
+local function radar_grain(freq, triangle)
     local frames = math.floor(RADAR.tone_seconds * RATE)
     return {
         frames = frames,
         grain = function(i)
-            local ph = i * step
             local v
-            if square then
-                -- Truncated square series (odd harmonics through the 9th):
-                -- buzzy against the sine without naive-square aliasing.
-                v = (math.sin(ph) + math.sin(3 * ph) / 3 + math.sin(5 * ph) / 5
-                    + math.sin(7 * ph) / 7 + math.sin(9 * ph) / 9)
-                    * (4 / math.pi) * 0.7
+            if triangle then
+                -- TriangleGrain.Evaluate verbatim: 0 up to +1 at the quarter
+                -- period, down through 0 to -1 at three quarters, back to 0.
+                local phase = (i * freq / RATE) % 1
+                if phase < 0.25 then v = 4 * phase
+                elseif phase < 0.75 then v = 2 - 4 * phase
+                else v = 4 * phase - 4 end
             else
-                v = math.sin(ph)
+                v = math.sin(i * 2 * math.pi * freq / RATE)
             end
             return v * adsr(i / RATE, RADAR.attack, RADAR.decay,
                 RADAR.sustain, RADAR.release, RADAR.sustain_level)
