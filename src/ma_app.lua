@@ -723,6 +723,34 @@ local function discover_landmarks()
     end
 end
 
+-- ------------------------------------------------------------ entity radar --
+-- One audio sweep per step: every visible actor as a two-grain ping —
+-- hostiles square, everyone else sine (ma_synth.radar has the recipe).
+-- Same visibility gate as the H announcer, so the radar never sounds what
+-- sight can't see. Tile-floored deltas keep the pitch interval stable while
+-- move animations are mid-flight.
+local function radar_sweep()
+    local p = player()
+    if not p or not p.position then return end
+    local px = math.floor(p.position.x)
+    local py = math.floor(p.position.y)
+    local list = {}
+    for _, a in ipairs(G_stateGame.actorManager.actorArray or {}) do
+        if a ~= p and not a.isDead and not a.isCorpse and a.position then
+            local ok, vis = pcall(a.getIsVisibleToPlayer, a)
+            if ok and vis then
+                local hostile = a.faction == "enemy" or (a.target == p)
+                list[#list + 1] = {
+                    dx = math.floor(a.position.x) - px,
+                    dy = math.floor(a.position.y) - py,
+                    hostile = hostile and true or false,
+                }
+            end
+        end
+    end
+    require("ma_synth").radar(list)
+end
+
 -- ------------------------------------------------------------ turn watcher --
 
 -- Called every pump frame; announces tile changes as the player moves.
@@ -795,6 +823,7 @@ function M.watch_tick()
     end
     pcall(function() require("ma_echo").on_move(mdx, mdy) end)
     pcall(discover_landmarks)
+    pcall(radar_sweep)
 end
 
 -- --------------------------------------------------------- reveal watchers --

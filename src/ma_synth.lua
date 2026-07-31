@@ -560,6 +560,89 @@ local ROOT_TO_FAMILY = {
     sand = "sand", shore = "sand",
 }
 
+-- ==================== Entity radar (Tanglebeep ScanCue port) ================
+-- One sweep per player step: visible actors as two-grain pings ordered
+-- left-to-right (x ascending, near rows first within a column). Each ping is
+-- a fixed 440 Hz reference grain then, 40 ms later, a second grain whose
+-- INTERVAL from the reference encodes north/south (1.3 semitones per tile,
+-- north = up — the reference exists solely to make the interval legible).
+-- Pan = dx/8, constant-power + ITD. Deliberately no distance gain falloff:
+-- distance reads from pan magnitude and interval size (ScanCue.cs).
+-- Timbre is the class channel: hostiles SQUARE (odd-harmonic buzz),
+-- everyone else SINE.
+local RADAR = {
+    ref_hz = 440.0,
+    semitones_per_tile = 1.3,
+    max_pan_tiles = 8.0,
+    gap = 0.04,          -- reference -> second grain
+    interval = 0.2,      -- entity -> entity spacing in the sweep
+    vol = 0.2,
+    attack = 0.001, decay = 0.020, sustain = 0.040, release = 0.015,
+    sustain_level = 0.8,
+    max_entities = 10,   -- bounds render cost; a longer sweep than 2 s is
+                         -- stale before it finishes anyway
+}
+RADAR.tone_seconds = RADAR.attack + RADAR.decay + RADAR.sustain + RADAR.release
+
+local function radar_grain(freq, square)
+    local step = 2 * math.pi * freq / RATE
+    local frames = math.floor(RADAR.tone_seconds * RATE)
+    return {
+        frames = frames,
+        grain = function(i)
+            local ph = i * step
+            local v
+            if square then
+                -- Truncated square series (odd harmonics through the 9th):
+                -- buzzy against the sine without naive-square aliasing.
+                v = (math.sin(ph) + math.sin(3 * ph) / 3 + math.sin(5 * ph) / 5
+                    + math.sin(7 * ph) / 7 + math.sin(9 * ph) / 9)
+                    * (4 / math.pi) * 0.7
+            else
+                v = math.sin(ph)
+            end
+            return v * adsr(i / RATE, RADAR.attack, RADAR.decay,
+                RADAR.sustain, RADAR.release, RADAR.sustain_level)
+        end,
+    }
+end
+
+-- entities: { { dx =, dy =, hostile = bool } ... }, player-relative tiles.
+-- A new sweep stops the one in flight (a stale sweep is misinformation).
+function M.radar(entities)
+    if not entities or #entities == 0 then return end
+    local ok, err = pcall(function()
+        table.sort(entities, function(a, b)
+            if a.dx ~= b.dx then return a.dx < b.dx end
+            return a.dy < b.dy
+        end)
+        local placements = {}
+        local t0 = 0
+        for i, e in ipairs(entities) do
+            if i > RADAR.max_entities then break end
+            local pan = math.max(-1, math.min(1, e.dx / RADAR.max_pan_tiles))
+            -- dy is screen-down positive; north (dy < 0) raises the pitch.
+            local second_hz = RADAR.ref_hz
+                * math.pow(2, -e.dy * RADAR.semitones_per_tile / 12)
+            local g1 = radar_grain(RADAR.ref_hz, e.hostile)
+            local g2 = radar_grain(second_hz, e.hostile)
+            placements[#placements + 1] = { grain = g1.grain, frames = g1.frames,
+                start = t0, pan = pan, gain = RADAR.vol }
+            placements[#placements + 1] = { grain = g2.grain, frames = g2.frames,
+                start = t0 + RADAR.gap, pan = pan, gain = RADAR.vol }
+            t0 = t0 + RADAR.interval
+        end
+        local data = render_placements(placements)
+        if not data then return end
+        if S.radar_src then pcall(S.radar_src.stop, S.radar_src) end
+        local src = love.audio.newSource(data, "static")
+        src:play()
+        S.radar_src = src
+        S.sources[#S.sources + 1] = src
+    end)
+    if not ok then require("ma_speech").log("radar error: " .. tostring(err)) end
+end
+
 function M.step_cue(root)
     local fam = STEP_FAMILIES[ROOT_TO_FAMILY[root or ""] or "stone"]
     local events = { { kind = fam.kind, freq = fam.freq, q = fam.q, dur = fam.dur, vol = fam.vol } }
