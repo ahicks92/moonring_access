@@ -294,7 +294,11 @@ local inventory = {
                 :sentence("Left and right change category")
         elseif prev ~= panel.categoryIndex then
             ctx.message:fragment(tostring(cat))
-            if n == 0 then ctx.message:list_item("empty") end
+            if n == 0 then
+                ctx.message:list_item("empty")
+            else
+                ctx.message:list_item(require("ma_text").plural(n, "item"))
+            end
             ctx.suppress_focus_label = true
         end
     end,
