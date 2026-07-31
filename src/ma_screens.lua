@@ -479,6 +479,19 @@ local function god_task_lines(god)
     return lines, done, total
 end
 
+-- Effective energy cost of a gift cell's action, as "energy N" — the same
+-- modifier-aware number the game's skill box and quickslot bar draw
+-- (CActions:getPlayerEnergyCost). nil for stat cells (not actions).
+local function energy_cost_text(cell)
+    local txt = nil
+    pcall(function()
+        local am = G_stateGame.actorManager
+        local act = am:getActionWithName(cell.tileDataName)
+        if act then txt = "energy " .. am.actionClass:getPlayerEnergyCost(act) end
+    end)
+    return txt
+end
+
 local function cell_state_text(tree, cell, td, x)
     if x == 1 then return nil end   -- the god head cell speaks for itself
     if cell.isOpen then return "owned" end
@@ -541,6 +554,8 @@ local gods = {
                                 ctx.message:fragment(clean((the_td and the_td.title) or the_cell.tileDataName))
                                 local state = cell_state_text(tree, the_cell, the_td, xx)
                                 if state then ctx.message:list_item(state) end
+                                local en = energy_cost_text(the_cell)
+                                if en then ctx.message:list_item(en) end
                             end
                         end,
                         -- Cursor sync on focus: the tree's digit-shortcut
@@ -586,6 +601,8 @@ local gods = {
                                 end
                                 local state = cell_state_text(tree, the_cell, the_td, xx)
                                 if state then lines[#lines + 1] = state end
+                                local en = energy_cost_text(the_cell)
+                                if en then lines[#lines + 1] = en end
                                 pcall(function()
                                     lines[#lines + 1] = "Your devotion to " .. clean(gd.name or god)
                                         .. ": " .. G_stateGame:getDevotion(god)
