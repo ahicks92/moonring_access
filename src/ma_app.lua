@@ -993,23 +993,19 @@ local ACTIONS = {
         W.steps_enabled = (W.steps_enabled == false)
         speech.say("Step sounds " .. (W.steps_enabled ~= false and "on." or "off."), true)
     end,
-    character = function()
-        local ps = playerStats
-        if not ps then return end
-        local p = G_stateGame.actorManager.player
-        local m = MB.new():fragment(tostring(ps.name))
-            :list_item("level " .. tostring(ps.level))
-            :sentence("strength " .. ps.strength)
-            :list_item("intellect " .. ps.intellect)
-            :list_item("finesse " .. ps.finesse)
-            :list_item("perception " .. ps.perception)
-            :list_item("endurance " .. ps.endurance)
-            :list_item("luck " .. ps.luck)
-        local ok, melee = pcall(p.getMeleeWeaponData, p)
-        if ok and melee and melee.name then m:sentence("wielding " .. melee.name) end
-        local ok2, ranged = pcall(p.getRangedWeaponData, p)
-        if ok2 and ranged and ranged.name then m:sentence("ranged " .. ranged.name) end
-        speech.say(m, true)
+    -- Ctrl+C: last spoken utterance -> system clipboard (the reliable way
+    -- to spell a name: paste it wherever spelling review is comfortable).
+    -- The character summary this chord used to hold lives on the character
+    -- sheet screen now.
+    copy_spoken = function()
+        local t = speech.last
+        if not t or t == "" then
+            speech.say("Nothing to copy.", true)
+            return
+        end
+        love.system.setClipboardText(t)
+        speech.say("Copied.", true)
+        speech.last = t   -- keep the copied line, not "Copied.", so the chord repeats
     end,
 }
 

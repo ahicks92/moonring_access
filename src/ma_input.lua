@@ -172,7 +172,7 @@ function M.claim(kb)
     if in_game then
         local CHORDS = {   -- ctrl+letter -> action
             h = "pois", x = "vitals", m = "money", p = "position",
-            t = "turns", q = "modes", e = "echo_toggle", c = "character",
+            t = "turns", q = "modes", e = "echo_toggle", c = "copy_spoken",
             f = "steps_toggle", w = "tune_toggle",
             -- s: Ctrl+S statuses, Ctrl+Shift+S secrets (resolved below)
             s = "statuses",

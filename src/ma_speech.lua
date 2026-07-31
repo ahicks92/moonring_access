@@ -132,6 +132,7 @@ function M.say(text, interrupt)
     end
     if type(text) ~= "string" or text == "" then return end
     if not text:match("[%.%!%?%:][%)%]\"']*$") then text = text .. "." end
+    M.last = text   -- Ctrl+C copies this to the clipboard
     if M.observer then pcall(M.observer, text) end
     log("say: " .. text)
     if not S.loaded or M.muted() then return end
