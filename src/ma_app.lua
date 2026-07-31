@@ -757,6 +757,20 @@ end
 -- Differential: terrain root only when it CHANGED; triggers on the new tile
 -- always. Non-interrupting — it follows the game-log lines of the same turn.
 function M.watch_tick()
+    -- Entity radar fires on the TURN edge, not on movement: standing and
+    -- waiting is a combat tactic, and the sweep must track monsters closing
+    -- in while you hold still. Runs after the game tick, so positions are
+    -- settled. First observed turn only arms (no sweep on load).
+    pcall(function()
+        local turns = G_stateGame.playerTurns or 0
+        if W.radar_turn == nil then
+            W.radar_turn = turns
+        elseif W.radar_turn ~= turns then
+            W.radar_turn = turns
+            radar_sweep()
+        end
+    end)
+
     local p = player()
     if not p or not p.position then W.px, W.py = nil, nil; return end
     local x, y = p.position.x, p.position.y
@@ -823,7 +837,6 @@ function M.watch_tick()
     end
     pcall(function() require("ma_echo").on_move(mdx, mdy) end)
     pcall(discover_landmarks)
-    pcall(radar_sweep)
 end
 
 -- --------------------------------------------------------- reveal watchers --

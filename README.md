@@ -91,7 +91,8 @@ The game's map key (M) opens two different mod screens:
   changes chirp: gentle rise means widened, loud fall means narrowed.
 - Step sounds (Ctrl+F toggles): terrain-keyed footfalls — wood, soft,
   stone, water, sand.
-- Entity radar: each step sweeps visible creatures left to right as tone
+- Entity radar: each turn (moving or waiting) sweeps visible creatures
+  left to right as tone
   pairs (from Tanglebeep) — a fixed reference tone, then a second whose
   pitch interval says how far north (up) or south (down), panned to their
   side. Hostiles are the reedier triangle voice; people and animals are
