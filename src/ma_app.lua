@@ -74,9 +74,11 @@ local POI_ROOTS = {
     -- Hazards: things that hurt or hold you.
     web = true, trapSpikesOn = true, trapSpikesOff = true, fireTrapOff = true,
     amberTrapOn = true, amberTrapOff = true, fire = true, embers = true, lava = true,
-    -- Overworld location icons.
-    village = true, cave_entrance = true, henge = true, ruin = true,
-    tower = true, monolith1 = true, monolith2 = true,
+    -- Overworld location icons (full entrance-root set).
+    town = true, village = true, cave_entrance = true, henge = true,
+    ruin = true, lesserRuin = true, tower = true, temple = true,
+    necropolis = true, ferryBuilding = true, singleHouse = true,
+    hiddenCamp = true, monolith1 = true, monolith2 = true,
     monolithBroken1 = true, monolithBroken2 = true,
     monolith1Inert = true, monolith2Inert = true, monolithShielded = true,
     jettyNorth = true, jettySouth = true, jettyEast = true, jettyWest = true,
@@ -527,9 +529,11 @@ local LANDMARK_ROOTS = {
     tileDoor = true, openDoor = true,
     stairsUp = true, stairsDown = true, floorDoor = true,
     trapdoorOpen = true, trapdoorClosed = true,
-    -- Overworld location icons.
-    village = true, cave_entrance = true, henge = true, ruin = true,
-    tower = true, monolith1 = true, monolith2 = true,
+    -- Overworld location icons (full entrance-root set).
+    town = true, village = true, cave_entrance = true, henge = true,
+    ruin = true, lesserRuin = true, tower = true, temple = true,
+    necropolis = true, ferryBuilding = true, singleHouse = true,
+    hiddenCamp = true, monolith1 = true, monolith2 = true,
     monolithBroken1 = true, monolithBroken2 = true,
     monolith1Inert = true, monolith2Inert = true, monolithShielded = true,
     jettyNorth = true, jettySouth = true, jettyEast = true, jettyWest = true,
