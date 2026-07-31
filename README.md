@@ -67,8 +67,10 @@ A nearest-first catalog of everything found on the level.
 
 The game's map key (M) opens two different mod screens:
 
-- Overworld: known locations nearest-first with their status (known, seen,
-  visited). Enter tracks a location; Alt+Backslash then reads its compass
+- Overworld: known locations nearest-first with their status (marked, seen,
+  visited). A "marked" entry is the game's nameless "?" icon — monolith
+  marks and rumors — spoken as "Unknown location" until seen; for henges
+  the details include the monolith's vision. Enter tracks a location; Alt+Backslash then reads its compass
   offset from anywhere. Details add region and distance.
 - Dungeons: the level as a grid of 9 by 9 tile blocks (usually one room
   each). Arrowing between blocks plays a connection earcon — one short

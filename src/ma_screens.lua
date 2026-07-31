@@ -653,10 +653,12 @@ local function compass_offset(dx, dy)
     return table.concat(parts, ", ")
 end
 
+-- known-but-never-seen is "marked": the game draws it as a nameless "?"
+-- icon (monolith marks, rumors). seeLocation upgrades it in place.
 local function location_status(name)
     if playerStats.visitedLocations and playerStats.visitedLocations[name] then return "visited" end
     if playerStats.seenLocations and playerStats.seenLocations[name] then return "seen" end
-    return "known"
+    return "marked"
 end
 
 -- Known locations sorted nearest-first: { key, name, x, y, dist, status,
@@ -673,15 +675,22 @@ local function known_locations()
         if name and name ~= "playerStart" and v.x and v.y
             and ((playerStats.knownLocations and playerStats.knownLocations[name])
                 or (playerStats.seenLocations and playerStats.seenLocations[name])) then
+            -- Name and region only once SEEN: until then the game shows a
+            -- nameless "?" on the map, so speaking the real name would leak
+            -- what a sighted player can't read.
             local display, region = nil, nil
-            pcall(function()
-                local wd = worldData and worldData.getWorldDataWithName(name)
-                if wd then
-                    if wd.displayName and wd.displayName ~= "" then display = wd.displayName end
-                    region = wd.overworldRegionName
-                end
-            end)
-            display = display or tostring(name):gsub("_", " ")
+            if playerStats.seenLocations and playerStats.seenLocations[name] then
+                pcall(function()
+                    local wd = worldData and worldData.getWorldDataWithName(name)
+                    if wd then
+                        if wd.displayName and wd.displayName ~= "" then display = wd.displayName end
+                        region = wd.overworldRegionName
+                    end
+                end)
+                display = display or tostring(name):gsub("_", " ")
+            else
+                display = "Unknown location"
+            end
             local dist = px and math.max(math.abs(v.x - px), math.abs(v.y - py)) or 0
             list[#list + 1] = {
                 key = name, name = clean(display), x = v.x, y = v.y,
@@ -955,11 +964,12 @@ local map_screen = {
                     local lines = { l.name }
                     if l.region then lines[#lines + 1] = "Region: " .. clean(l.region) end
                     lines[#lines + 1] = l.status
+                    -- The henge vision: for a marked-unseen henge this is
+                    -- the exact text the monolith showed when marking it —
+                    -- the player's only handle on which "?" this is.
                     pcall(function()
                         local vision = G_Globals.hengeToDescription[l.key]
-                        if vision and playerStats.seenLocations[l.key] then
-                            lines[#lines + 1] = clean(vision)
-                        end
+                        if vision then lines[#lines + 1] = clean(vision) end
                     end)
                     local where = MB.new():fragment(compass_offset(l.dx, l.dy))
                     if l.dist > 0 then where:list_item(l.dist .. " overworld steps") end
