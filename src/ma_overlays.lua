@@ -269,20 +269,34 @@ local inventory = {
     id = "inventory",
     handler = function(self)
         local panel = G_stateGame and G_stateGame.inventoryPanel
-        return (panel and panel.isOpen) and "active" or "inactive"
+        local open = panel and panel.isOpen
+        if not open then self._open_cat = nil end
+        return open and "active" or "inactive"
     end,
     sub_identity = function(self)
         local panel = G_stateGame and G_stateGame.inventoryPanel
         if not panel then return nil end
         return "cat" .. tostring(panel.categoryIndex) .. "#" .. tostring(#(panel.sortedInventory or {}))
     end,
+    -- Three announce shapes: a true open gets the full header; a category
+    -- flip speaks JUST the new category (focus label suppressed); a count
+    -- change in place (item consumed/dropped) says nothing and lets the
+    -- newly focused row speak alone.
     announce = function(self, ctx)
         local panel = G_stateGame.inventoryPanel
         local cat = (G_Globals.categoryTypes and G_Globals.categoryTypes[panel.categoryIndex]) or "items"
         local n = #(panel.sortedInventory or {})
-        ctx.message:fragment("Inventory"):list_item(tostring(cat))
-            :list_item(require("ma_text").plural(n, "item"))
-            :sentence("Left and right change category")
+        local prev = self._open_cat
+        self._open_cat = panel.categoryIndex
+        if prev == nil then
+            ctx.message:fragment("Inventory"):list_item(tostring(cat))
+                :list_item(require("ma_text").plural(n, "item"))
+                :sentence("Left and right change category")
+        elseif prev ~= panel.categoryIndex then
+            ctx.message:fragment(tostring(cat))
+            if n == 0 then ctx.message:list_item("empty") end
+            ctx.suppress_focus_label = true
+        end
     end,
     build = function(self, b)
         local panel = G_stateGame and G_stateGame.inventoryPanel

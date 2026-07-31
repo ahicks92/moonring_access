@@ -19,6 +19,10 @@
 --
 -- announce (MoonringAccess extension) runs once per fresh open / sub-identity
 -- swap, before the focused label — the place for a menu title or modal body.
+-- An announce that sets ctx.suppress_focus_label = true speaks alone: the
+-- focused node's label is skipped for that event (used when a sub-identity
+-- swap is a small in-place change — an inventory category flip — where
+-- re-reading the focused row is noise).
 --
 -- sub_identity marks in-place content swaps: when it changes while the id
 -- stays active, treat as a fresh open (reset focus to the start node, ignore a
@@ -195,6 +199,10 @@ local function build_and_process(overlay, command)
     D.last_spoken = cur.key
     if fresh and overlay.announce then
         pcall(overlay.announce, overlay, ctx)
+        if ctx.suppress_focus_label then
+            return focus_fields(graph, state,
+                { message = message, entered = true, spoke_label = false })
+        end
         message:sentence()   -- the announcement and the focus label are separate sentences
     end
     local node = graph.current.nodes[cur.key]
