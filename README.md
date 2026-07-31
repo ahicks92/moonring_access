@@ -54,8 +54,8 @@ A nearest-first catalog of everything found on the level.
 
 - H: hostiles in sight, nearest first. Ctrl+H: points of interest in line
   of sight. Alt+H: notable terrain, grouped with counts.
-- Ctrl+X vitals, Ctrl+M money, Ctrl+P position, Ctrl+T turn count,
-  Ctrl+Q safety/quiet modes.
+- Ctrl+X vitals, Ctrl+M money, Ctrl+P position, Ctrl+T date and time of
+  day, Ctrl+Q safety/quiet modes plus sight and lit radius.
 - Ctrl+C copies the last spoken line to the clipboard — paste anywhere to
   check spelling.
 - Ctrl+S status effects (active, then building); Ctrl+Shift+S counts the

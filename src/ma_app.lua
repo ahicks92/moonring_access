@@ -290,8 +290,36 @@ local function announce_position()
         :list_item(p.position.x .. ", " .. p.position.y), true)
 end
 
-local function announce_turns()
-    speech.say("Turn " .. tostring(G_stateGame.playerTurns or 0), true)
+-- Ctrl+T: world time. The sighted HUD shows a moon-phase glyph, a one-
+-- handed clock (hand up = darkest, down = brightest) and "Day N of the X
+-- Moon". We speak the date plus a phrase for the hand position — light
+-- level (and with it sight radius) tracks it, brightest at midday.
+-- (playerTurns deliberately not exposed: the game shows it nowhere and
+-- nothing player-facing is turn-based — hunger, statuses and cooldowns
+-- all run on ticks.)
+local function announce_time()
+    local m = MB.new()
+    pcall(function()
+        m:fragment(require("calendar").getMainDateAsText())
+    end)
+    pcall(function()
+        local cal = require("calendar")
+        local phrase
+        if cal.hasSunMoonCycle then
+            phrase = cal.isDay() and "day" or "night"
+        else
+            local t = cal.getTimeFraction()
+            if t < 0.10 then phrase = "deep night"
+            elseif t < 0.30 then phrase = "dawn"
+            elseif t < 0.45 then phrase = "morning"
+            elseif t < 0.55 then phrase = "midday"
+            elseif t < 0.75 then phrase = "afternoon"
+            elseif t < 0.90 then phrase = "dusk"
+            else phrase = "deep night" end
+        end
+        m:list_item(phrase)
+    end)
+    speech.say(m, true)
 end
 
 -- Ctrl+S: HOW MANY hidden things remain on this level — knowledge without
@@ -512,9 +540,17 @@ end
 local function announce_modes()
     local safety = G_stateGame.safetyModeOn
     local sneak = playerStats and playerStats.isSneaking
-    speech.say(MB.new()
+    local m = MB.new()
         :list_item("Safety " .. (safety and "on" or "off"))
-        :list_item("quiet " .. (sneak and "on" or "off")), true)
+        :list_item("quiet " .. (sneak and "on" or "off"))
+    -- Sight radii belong here: quiet mode dims the ward, costing a tile of
+    -- both. "sight" = line of sight; "lit" = the remember/explore radius.
+    pcall(function()
+        m:list_item("sight " .. math.floor(G_stateGame.playerViewDistance))
+        m:list_item("lit " .. math.floor(math.min(G_stateGame.lightDistance,
+            G_stateGame.playerViewDistance)))
+    end)
+    speech.say(m, true)
 end
 
 -- ------------------------------------------------------- LOS discovery -----
@@ -957,7 +993,7 @@ local ACTIONS = {
     vitals = announce_vitals,
     money = announce_money,
     position = announce_position,
-    turns = announce_turns,
+    time = announce_time,
     modes = announce_modes,
     secrets = announce_secrets,
     statuses = announce_statuses,
