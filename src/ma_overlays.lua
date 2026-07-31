@@ -231,8 +231,12 @@ local text_input = announce_only("text_input", "textInputBox", function(box, ctx
     ctx.message:sentence("Type and press enter")
 end)
 
--- Number box: sub-identity includes the value, so left/right adjustments
--- (handled by the game) re-announce automatically.
+-- Number box: a quantity prompt ("SELL 3x 'Dagger' For 21G?"). The game's
+-- widget opens with the highlight on Close (it never initialises confirm),
+-- so a bare Enter closes it SILENTLY selling nothing — we own it fully
+-- instead, confirm-box style. Left/right adjust the count from either row
+-- (Shift steps by 10); the owning panel's callback rewrites the body text
+-- with the new total price, which is what we re-speak.
 -- The game names this widget numberInputBox on G_stateGame but numberBox on
 -- the title screen; check both.
 local function number_widget()
@@ -245,18 +249,56 @@ local number_box = {
         local box = number_widget()
         return (box and box.isOpen) and "active" or "inactive"
     end,
-    sub_identity = function(self)
+    announce = function(self, ctx)
         local box = number_widget()
-        return box and (tostring(box.bodyText) .. "=" .. tostring(box.number)) or nil
+        if not box then return end
+        ctx.message:fragment(clean(box.bodyText))
+        if (box.maxNumber or 1) > 1 then
+            ctx.message:sentence("Left and right adjust the count")
+        end
     end,
     build = function(self, b)
         local box = number_widget()
         if not box or not box.isOpen then return end
-        b:add_label(Id.structural("number"), function(ctx)
-            ctx.message:fragment(clean(box.bodyText))
-            ctx.message:list_item(tostring(box.number))
-            ctx.message:sentence("Left and right to adjust, enter to confirm")
-        end)
+        b:capture_input()
+        local adjust = nil
+        if (box.maxNumber or 1) > 1 then
+            adjust = function(ctx, sign, large)
+                local step = large and 10 or 1
+                local n = math.max(1, math.min(box.maxNumber, (box.number or 1) + sign * step))
+                if n ~= box.number then
+                    box.number = n
+                    box.confirm = true   -- visual parity: highlight moves to Confirm
+                    if box.alteredNumberCallback then
+                        pcall(box.alteredNumberCallback, box.alteredNumberCallbackObject, n)
+                    end
+                end
+                ctx.message:fragment(clean(box.bodyText))
+            end
+        end
+        b:start_row("confirm")
+        b:add_item(Id.structural("confirm"), {
+            label = function(ctx) ctx.message:fragment("Confirm") end,
+            on_click = function(ctx)
+                box.confirm = true   -- visual parity, write-only
+                local n, fn, obj = box.number, box.yesFunction, box.yesFunctionObject
+                box:setInactive()
+                if fn and n and n ~= 0 then fn(obj, n) end
+                G_playSound("page_close")
+            end,
+            on_horizontal_adjust = adjust,
+        })
+        b:end_row()
+        b:start_row("close")
+        b:add_item(Id.structural("close"), {
+            label = function(ctx) ctx.message:fragment("Close") end,
+            on_click = function(ctx)
+                box:setInactive()
+                G_playSound("page_close")
+            end,
+            on_horizontal_adjust = adjust,
+        })
+        b:end_row()
     end,
 }
 
