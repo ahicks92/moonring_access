@@ -61,6 +61,7 @@ local function tile_key(x, y)
     if vis == "unexplored" then return "unexplored" end
     local _, shape_key = map.path_shape_text(x, y)
     return tostring(map.root(x, y)) .. "|" .. tostring(shape_key) .. "|" .. vis
+        .. (map.is_amber(x, y) and "|amber" or "")
 end
 
 local function triggers_at(x, y)
@@ -119,6 +120,7 @@ local function describe(m, x, y, full)
         C.last_vis = "unexplored"
         C.last_root = nil
         C.last_shape = nil
+        C.last_amber = nil
         return
     end
 
@@ -135,6 +137,18 @@ local function describe(m, x, y, full)
     end
     C.last_root = root
     C.last_pathkey = shape_key
+
+    -- Amber fog is drawn on any remembered tile, so any tile we narrate here
+    -- may carry it (parity-safe: the unexplored branch above returned already).
+    -- Differential on both edges — the boundary of the field matters as much
+    -- as its presence.
+    local amber = map.is_amber(x, y)
+    if amber then
+        if full or not C.last_amber then m:list_item("amber fog") end
+    elseif C.last_amber and not full then
+        m:list_item("fog clear")
+    end
+    C.last_amber = amber
 
     local occupant = map.creature_at(x, y)
     if occupant then
@@ -251,7 +265,7 @@ function M.recenter(silent)
     local px, py = player_pos()
     if not px then return end
     C.x, C.y = px, py
-    C.last_root, C.last_shape, C.last_vis = nil, nil, nil
+    C.last_root, C.last_shape, C.last_vis, C.last_amber = nil, nil, nil, nil
     if not silent then
         local m = MB.new():fragment("Cursor on you"):sentence()
         describe(m, C.x, C.y, true)
@@ -278,7 +292,7 @@ function M.follow_tick()
         local px, py = player_pos()
         if px and (C.x ~= px or C.y ~= py) then
             C.x, C.y = px, py
-            C.last_root, C.last_shape, C.last_vis = nil, nil, nil
+            C.last_root, C.last_shape, C.last_vis, C.last_amber = nil, nil, nil, nil
         end
     end
 end
