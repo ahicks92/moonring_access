@@ -816,17 +816,7 @@ function M.watch_tick()
     -- range 1, and a void edge is a descend affordance, so each of these
     -- keeps announcing for as long as it's true.
     pcall(function()
-        local mm = require("ma_map")
-        local lava, void = false, false
-        for ndy = -1, 1 do
-            for ndx = -1, 1 do
-                if not (ndx == 0 and ndy == 0) then
-                    local r = mm.root(x + ndx, y + ndy)
-                    if r == "lava" then lava = true
-                    elseif r == "void" then void = true end
-                end
-            end
-        end
+        local lava, void = require("ma_map").near_hazards(x, y)
         if lava then m:list_item("near lava") end
         if void then m:list_item("near void") end
     end)

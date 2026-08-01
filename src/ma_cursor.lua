@@ -150,6 +150,12 @@ local function describe(m, x, y, full)
     end
     C.last_amber = amber
 
+    -- Hazards hidden in the wall vocabulary: always spoken, never
+    -- differential — the same rule as the walker (remembered-gated inside).
+    local lava, void = map.near_hazards(x, y)
+    if lava then m:list_item("near lava") end
+    if void then m:list_item("near void") end
+
     local occupant = map.creature_at(x, y)
     if occupant then
         if occupant.isPlayer then

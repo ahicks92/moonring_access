@@ -447,6 +447,28 @@ function M.is_amber(x, y)
     return (ok and v) and true or false
 end
 
+-- "near lava" / "near void" flags for the 8-neighbourhood of x,y. Both
+-- hide inside the "wall" shape vocabulary (non-walkable), so they get their
+-- own always-spoken channel. Neighbours are gated on map memory: the
+-- walker's own ring is always felt, and the cursor must not leak hazards
+-- on tiles a sighted player has never seen.
+function M.near_hazards(x, y)
+    local lava, void = false, false
+    for dy = -1, 1 do
+        for dx = -1, 1 do
+            if not (dx == 0 and dy == 0) then
+                local nx, ny = x + dx, y + dy
+                if M.remembered(nx, ny) then
+                    local r = M.root(nx, ny)
+                    if r == "lava" then lava = true
+                    elseif r == "void" then void = true end
+                end
+            end
+        end
+    end
+    return lava, void
+end
+
 function M.creature_at(x, y)
     local am = G_stateGame and G_stateGame.actorManager
     if not am then return nil end
