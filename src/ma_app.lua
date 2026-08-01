@@ -779,7 +779,10 @@ function M.watch_tick()
     local mdx, mdy = nil, nil
     if not first then mdx, mdy = x - W.px, y - W.py end
     W.px, W.py = x, y
-    if first then W.root = nil; W.reveals = nil; return end   -- world entry; "Entering X" covers it
+    if first then   -- world entry; "Entering X" covers it
+        W.root, W.reveals, W.shape, W.near_lava = nil, nil, nil, nil
+        return
+    end
 
     local m = MB.new()
     -- Read the root LIVE at the new coords. getCurrentTileRoot returns the
@@ -806,6 +809,37 @@ function M.watch_tick()
         if named then m:list_item(named) end
     end
     W.path_key = shape_key
+
+    -- Lava adjacency: spit range is 1, so the 8-neighbourhood is the danger
+    -- zone. Spoken once on entering it (differential), silent while inside.
+    pcall(function()
+        local mm = require("ma_map")
+        local near = false
+        for ndy = -1, 1 do
+            for ndx = -1, 1 do
+                if not (ndx == 0 and ndy == 0)
+                    and mm.root(x + ndx, y + ndy) == "lava" then
+                    near = true
+                end
+            end
+        end
+        if near and not W.near_lava then m:list_item("near lava") end
+        W.near_lava = near
+    end)
+
+    -- Wall shape (hallway/corner/dead end): the exploration cursor's exact
+    -- classifier and blocked() rule, spoken on change like the cursor's
+    -- differential — walking a route and cursoring it now use one
+    -- vocabulary. Silence is the fully-open cue.
+    pcall(function()
+        local mm = require("ma_map")
+        local shape = require("ma_shapes").describe(function(sdx, sdy)
+            return mm.blocked(x + sdx, y + sdy)
+        end)
+        if shape ~= W.shape and shape then m:list_item(shape) end
+        W.shape = shape
+    end)
+
     for _, tn in ipairs(trigger_names_at(x, y)) do
         m:list_item(tn)
     end
