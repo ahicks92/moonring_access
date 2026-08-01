@@ -780,7 +780,7 @@ function M.watch_tick()
     if not first then mdx, mdy = x - W.px, y - W.py end
     W.px, W.py = x, y
     if first then   -- world entry; "Entering X" covers it
-        W.root, W.reveals, W.shape, W.near_lava = nil, nil, nil, nil
+        W.root, W.reveals, W.shape = nil, nil, nil
         return
     end
 
@@ -810,21 +810,25 @@ function M.watch_tick()
     end
     W.path_key = shape_key
 
-    -- Lava adjacency: spit range is 1, so the 8-neighbourhood is the danger
-    -- zone. Spoken once on entering it (differential), silent while inside.
+    -- Lava/void adjacency, EVERY step while inside the 8-neighbourhood — no
+    -- differential, unlike shapes. Both hide inside the "wall" vocabulary,
+    -- and shape-trained players rightly never inspect walls: lava spits at
+    -- range 1, and a void edge is a descend affordance, so each of these
+    -- keeps announcing for as long as it's true.
     pcall(function()
         local mm = require("ma_map")
-        local near = false
+        local lava, void = false, false
         for ndy = -1, 1 do
             for ndx = -1, 1 do
-                if not (ndx == 0 and ndy == 0)
-                    and mm.root(x + ndx, y + ndy) == "lava" then
-                    near = true
+                if not (ndx == 0 and ndy == 0) then
+                    local r = mm.root(x + ndx, y + ndy)
+                    if r == "lava" then lava = true
+                    elseif r == "void" then void = true end
                 end
             end
         end
-        if near and not W.near_lava then m:list_item("near lava") end
-        W.near_lava = near
+        if lava then m:list_item("near lava") end
+        if void then m:list_item("near void") end
     end)
 
     -- Wall shape (hallway/corner/dead end): the exploration cursor's exact
