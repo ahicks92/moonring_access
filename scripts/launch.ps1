@@ -38,6 +38,11 @@ param(
     # way, so muting costs a test nothing.
     [switch]$Speak,
 
+    # Show lovely-injector's console window (hidden by default via its
+    # --disable-console flag; lovely still writes Mods/lovely/log). Only
+    # useful when debugging lovely itself.
+    [switch]$LovelyConsole,
+
     [string]$GameDir
 )
 
@@ -96,8 +101,14 @@ public static extern bool CreateProcess(string lpApplicationName, string lpComma
     $si.wShowWindow = 7           # SW_SHOWMINNOACTIVE - shown, but never activated
     $pi = New-Object MoonringAccess.Launch+PROCESS_INFORMATION
 
+    # Lovely (0.9.0) parses the game's command line; --disable-console keeps
+    # its log window from opening at all (the log file still lands in
+    # Mods\lovely). The exe path doubles as argv[0].
+    $cmdline = "`"$exe`""
+    if (-not $LovelyConsole) { $cmdline += " --disable-console" }
+
     Write-Host "Launching Moonring directly (no focus steal$(if(-not $Speak){', muted'})) ..."
-    $ok = [MoonringAccess.Launch]::CreateProcess($exe, $null, [IntPtr]::Zero, [IntPtr]::Zero, $false, 0,
+    $ok = [MoonringAccess.Launch]::CreateProcess($exe, $cmdline, [IntPtr]::Zero, [IntPtr]::Zero, $false, 0,
                                                  [IntPtr]::Zero, (Split-Path $exe), [ref]$si, [ref]$pi)
     if (-not $ok) {
         $err = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
