@@ -152,9 +152,11 @@ local function describe(m, x, y, full)
 
     -- Hazards hidden in the wall vocabulary: always spoken, never
     -- differential — the same rule as the walker (remembered-gated inside).
+    -- ON the hazard itself the root already said it; "lava, near lava" is
+    -- noise.
     local lava, void = map.near_hazards(x, y)
-    if lava then m:list_item("near lava") end
-    if void then m:list_item("near void") end
+    if lava and root ~= "lava" then m:list_item("near lava") end
+    if void and root ~= "void" then m:list_item("near void") end
 
     local occupant = map.creature_at(x, y)
     if occupant then
